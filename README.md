@@ -1,6 +1,6 @@
 # Mosaic - Modular Multi-Agent Tools for Python
 
-> A modern toolkit for building, combining, and experimenting with modular multi-agent tools. Created and maintained by Garvit Mehra.
+> A modern toolkit for building, combining, and experimenting with modular multi-agent tools.
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
