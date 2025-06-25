@@ -159,8 +159,7 @@ Web Agent: Here are the latest developments in AI...
 mosaic/
 ├── README.md                 # Project documentation
 ├── requirements.txt          # Python dependencies
-├── LICENSE                   # MIT License
-├── .env                      # Your API keys (only, not uploaded)
+├── .env                      # Your API keys
 ├── client.py                 # Main client application
 ├── server.py                 # MCP server for database operations
 ├── utils/                    # Utility modules
@@ -168,8 +167,8 @@ mosaic/
 │   ├── RAGTools.py           # RAG/document retrieval tools
 │   ├── ProcessPDF.py         # PDF/image processing tools
 │   └── Clients.py            # (Legacy/optional MCP client implementations)
-├── db.sqlite                 # Database file (auto-created, can be gitignored)
-├── mosaic.log                # Log file (auto-created, can be gitignored)
+├── db.sqlite                 # Database file (auto-created)
+├── mosaic.log                # Log file (auto-created)
 └── venv/                     # Virtual environment (not uploaded)
 ```
 
