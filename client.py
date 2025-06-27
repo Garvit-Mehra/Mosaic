@@ -5,7 +5,7 @@ Mosaic - Modular Multi-Agent Tools for Python
 A modern toolkit for building, combining, and experimenting with modular multi-agent tools.
 
 Author: Garvit Mehra
-Version: 1.0.0
+Version: 1.1.0
 License: MIT
 """
 
