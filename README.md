@@ -1,27 +1,29 @@
-# Mosaic - Modular Multi-Agent Tools for Python
+# Mosaic - Multi-Agent Client for MCP Servers
 
-> A modern toolkit for building, combining, and experimenting with modular multi-agent tools.
+> A modern multi-agent client framework that connects to MCP (Model Context Protocol) servers using OpenAI and LangChain.
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.1.0-orange.svg)](VERSION)
 [![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4-orange.svg)](https://openai.com)
 [![LangChain](https://img.shields.io/badge/LangChain-0.1+-yellow.svg)](https://langchain.com)
+[![MCP](https://img.shields.io/badge/MCP-1.0+-purple.svg)](https://modelcontextprotocol.io/)
 
-## Overview
+## 📖 Overview
 
-**Mosaic** is a personal project by Garvit Mehra. It's a modular, multi-agent toolkit for Python that lets you route user queries to specialized tools/agents for database management, web search, document analysis, and general conversation. Each agent is optimized for specific tasks, and you can easily extend or remix the toolkit for your own experiments.
+**Mosaic** is a multi-agent client framework that intelligently routes user queries to specialized agents and MCP (Model Context Protocol) servers. Mosaic provides a way to integrate MCP servers with OpenAI GPT models using LangChain.
 
-### Key Features
+### 🚀 Key Features
 
-- Modular multi-agent architecture
-- Intelligent routing of queries to the right tool/agent
-- Database management (SQLite + MCP integration)
-- Real-time web search (Tavily API)
-- Document analysis (RAG, PDF, image support)
-- Context-aware conversation
-- Simple, hackable, and easy to extend
+- **Multi-Agent Client Framework**: Route queries to specialized agents and MCP servers
+- **Intelligent Query Classification**: Automatically determines the best agent for each query
+- **Built-in Capabilities**: Web search, RAG, and general conversation
+- **MCP Server Integration**: Connect to any MCP-compatible server
+- **OpenAI + LangChain**: Leverage GPT models with custom tools
+- **Easy Extension**: Simple to add new agents and MCP servers
+- **Configuration Templates**: Ready-to-use server configurations
 
-## Architecture
+## 🏗️ Architecture
 
 ```mermaid
 flowchart TD
@@ -29,25 +31,41 @@ flowchart TD
     B --> C["Specialized Agents"]
     C --> D["General Agent"]
     C --> E["Web Search Agent"]
-    C --> F["Database Manager Agent"]
-    C --> G["RAG Agent"]
+    C --> F["RAG Agent"]
+    C --> G["MCP Server Agents"]
+    G --> H["Database Server"]
+    G --> I["Custom Servers"]
 ```
 
-## Agent Specializations
+## 🤖 Built-in Agent Specializations
 
 ### General Agent
 - Handles general conversation and follow-up questions
+- Provides context-aware responses
+- Manages conversation flow
 
 ### Web Search Agent
 - Real-time information retrieval (news, sports, weather, etc.)
-
-### Database Manager Agent
-- Full database operations, CRUD, and analysis
+- Current events and live data
+- Breaking news and updates
 
 ### RAG Agent
-- Document analysis, PDF/image processing, semantic search
+- Document analysis and processing
+- PDF and image content extraction
+- Semantic search across documents
+- Knowledge base management
 
-## Installation
+## 🔌 Pre-defined MCP Servers
+
+### Database Manager Server (Example Add-on)
+- Full database operations (CRUD)
+- Table creation and management
+- Data analysis and queries
+- SQL execution with safety checks
+
+*Note: This is an example MCP server provided with Mosaic. You can create your own MCP servers or connect to existing ones.*
+
+## 🛠️ Installation & Setup
 
 ### Prerequisites
 
@@ -63,149 +81,278 @@ flowchart TD
    cd mosaic
    ```
 
-2. **Install dependencies**
+2. **Create a virtual environment**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Set up your API keys**
-   - Create a `.env` file in the project root with only your API keys:
-     ```env
-     OPENAI_API_KEY=your_openai_api_key_here
-     TAVILY_API_KEY=your_tavily_api_key_here
-     ```
-   - Do **not** include any other settings in `.env`.
+4. **Set up your API keys**
+   Create a `.env` file in the project root:
+   ```env
+   OPENAI_API_KEY=your_openai_api_key_here
+   TAVILY_API_KEY=your_tavily_api_key_here
+   ```
 
-4. **Run the Server and Client**
-   - Start the database server (in one terminal):
-     ```bash
-     python server.py
-     ```
-   - Start the main client (in another terminal):
-     ```bash
-     python client.py
-     ```
+5. **Start MCP servers (optional)**
+   ```bash
+   # Example: Start the database server
+   python servers/database_server.py
+   ```
 
-## Configuration Guide
+6. **Run Mosaic**
+   ```bash
+   # Option 1: Direct usage
+   python client.py
+   
+   # Option 2: Using template configuration
+   python mosaic_template.py
+   ```
 
-**Only API keys should be in your `.env` file.**
+## ⚙️ Configuration
 
-All other settings (such as model, history length, logging, chunk size, etc.) are configured directly in the code files. Here's how to change them:
+### MCP Server Configuration
 
-### 1. **Model, History, and Logging**
-- **File:** `client.py`
-- **Variables to edit:**
-  - `MODEL_NAME` (e.g., "gpt-4.1-mini")
-  - `MAX_HISTORY_EXCHANGES` (number of back-and-forths to keep in memory)
-  - Logging file name and level (see `logging.basicConfig`)
+Connect to any MCP-compatible server:
 
-### 2. **Database and Server Settings**
-- **File:** `server.py`
-- **Variables to edit:**
-  - Database file path (edit `get_database_path()` if needed)
-  - Server port and host (edit `FastMCP` initialization)
-
-### 3. **RAG and Document Processing**
-- **File:** `utils/ProcessPDF.py` and `utils/RAGTools.py`
-- **Variables to edit:**
-  - Chunk size, overlap, and max search results (see function arguments and constants)
-
-### 4. **Other Customizations**
-- You can further customize agent prompts, toolsets, and behaviors directly in `client.py` under the agent setup section.
-
-**After making changes, simply restart the relevant Python process (client or server) to apply your new settings.**
-
-## Usage
-
-### Basic Usage
-
-```bash
-python client.py
+#### Custom MCP Server
+```python
+{
+    "name": "your_server_name",
+    "description": "Description of what your server does.",
+    "url": "http://localhost:PORT/sse",
+    "transport": "sse"  # Optional, defaults to "sse"
+}
 ```
 
-### Example Conversations
+### Client Configuration
 
-#### Database Operations
-```
-You: Create a table called users with columns name, email, and age
-Database Manager Agent: Table 'users' created successfully with columns: name (TEXT), email (TEXT), age (INTEGER)
+Edit `client.py` to customize:
 
-You: Insert a user named John with email john@example.com and age 30
-Database Manager Agent: Inserted row into users
-
-You: Show me all users
-Database Manager Agent: Here are all users in the database:
-- John (john@example.com, 30)
+```python
+# Model and AI settings
+MODEL_NAME = "gpt-4.1-mini"  # Change AI model
+MAX_HISTORY_EXCHANGES = 5    # Conversation memory length
 ```
 
-#### Document Analysis
-```
-You: load document reports/quarterly_report.pdf
-RAG Agent: Successfully loaded document: Document 'quarterly_report.pdf' added to knowledge base with 15 chunks.
+### RAG Configuration
 
-You: What were the quarterly results?
-RAG Agent: Based on the quarterly report, the company achieved...
+Edit `utils/ProcessPDF.py` to customize document processing:
+
+```python
+# Document chunking settings
+chunk_size = 1000      # Size of text chunks
+chunk_overlap = 200    # Overlap between chunks
+max_search_results = 5 # Number of results to return
 ```
 
-#### Web Search
+## 🎯 How Mosaic Works
+
+### 1. Query Classification
+When you send a message, the system:
+- Analyzes your intent using an AI classifier
+- Determines which agent is best suited for your query
+- Routes the query to the appropriate specialized agent or MCP server
+
+### 2. Agent Processing
+Each agent has specific capabilities:
+- **General Agent**: Handles conversation and follow-ups
+- **Web Agent**: Searches for current information
+- **RAG Agent**: Processes and queries documents
+- **MCP Agents**: Connect to external MCP servers
+
+### 3. Response Generation
+- The selected agent processes your query
+- Uses its specialized tools and knowledge
+- Returns a contextually relevant response
+
+### 4. Conversation Management
+- Maintains conversation history across agents
+- Provides context for follow-up questions
+- Manages session state and memory
+
+## 📚 Usage Examples
+
+### Built-in Web Search
 ```
 You: What's the latest news about AI?
-Web Agent: Here are the latest developments in AI...
+Mosaic (Web-Agent): Here are the latest developments in AI...
 ```
 
-## Project Structure
+### Built-in Document Analysis
+```
+You: load document reports/quarterly_report.pdf
+Mosaic (RAG-Agent): Successfully loaded document: Document 'quarterly_report.pdf' added to knowledge base with 15 chunks.
+
+You: What were the quarterly results?
+Mosaic (RAG-Agent): Based on the quarterly report, the company achieved...
+```
+
+### MCP Server Operations (Example)
+```
+You: Create a table called users with columns name, email, and age
+Mosaic (Database-Agent): Table 'users' created successfully with columns: name (TEXT), email (TEXT), age (INTEGER)
+
+You: Insert a user named John with email john@example.com and age 30
+Mosaic (Database-Agent): Inserted row into users
+```
+
+### General Conversation
+```
+You: Can you help me understand how this system works?
+Mosaic (General-Agent): I'd be happy to explain! Mosaic is a multi-agent client framework that...
+```
+
+## 📁 Project Structure
 
 ```
 mosaic/
-├── README.md                 # Project documentation
+├── README.md                 # Documentation
 ├── requirements.txt          # Python dependencies
-├── .env                      # Your API keys
+├── CHANGELOG.md              # Version history
+├── .env                      # Your API keys (create this, not in repo)
 ├── client.py                 # Main client application
-├── server.py                 # MCP server for database operations
+├── examples/                 # Templates
+│   ├── mosaic_template.py    # Template for custom configurations
+├── servers/                  # Example MCP servers
+│   ├── database_server.py    # Example SQLite database server
+│   ├── calendar_server.py    # Example calendar server
+│   └── db.sqlite             # Database file (auto-created)
 ├── utils/                    # Utility modules
-│   ├── __init__.py           # (Can be empty or minimal)
+│   ├── __init__.py           # Package initialization
 │   ├── RAGTools.py           # RAG/document retrieval tools
 │   ├── ProcessPDF.py         # PDF/image processing tools
-│   └── Clients.py            # (Legacy/optional MCP client implementations)
-├── db.sqlite                 # Database file (auto-created)
-├── mosaic.log                # Log file (auto-created)
-└── venv/                     # Virtual environment (not uploaded)
+│   └── Clients.py            # Legacy MCP client implementations
+└── mosaic.log                # Log file (auto-created)
 ```
 
-## Contributing
+## 🔧 Advanced Configuration
 
-Contributions are welcome! If you find a bug or have an idea, feel free to open an issue or submit a pull request.
+### Creating Custom MCP Servers
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
+1. **Create a new server file** in `servers/`:
+```python
+#!/usr/bin/env python3
+from mcp.server.fastmcp import FastMCP
 
-## License
+mcp = FastMCP(
+    name="Your Custom Server",
+    host="127.0.0.1",
+    port=8001  # Choose a unique port
+)
+
+@mcp.tool(
+    name="your_tool",
+    description="Description of what your tool does"
+)
+async def your_tool(param: str) -> str:
+    # Your tool implementation
+    return "Tool result"
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+2. **Add to client configuration**:
+```python
+SERVER_CONFIGS = [
+    # ... existing configs
+    {
+        "name": "your_server",
+        "description": "Your custom server description",
+        "url": "http://localhost:8001/sse"
+    }
+]
+```
+
+### Environment Variables
+
+Only API keys should be in your `.env` file:
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+TAVILY_API_KEY=your_tavily_api_key_here
+```
+
+All other settings are configured directly in the code files for easy customization.
+
+## 🚀 Deployment
+
+### Local Development
+```bash
+# Terminal 1: Start MCP servers (optional)
+python servers/database_server.py
+
+# Terminal 2: Start client
+python client.py
+```
+
+### Production Considerations
+- Use environment variables for all API keys
+- Implement proper logging and monitoring
+- Consider using a process manager like PM2
+- Set up proper firewall rules for server ports
+
+## 🤝 Contributing
+
+Contributions are welcome! Here's how to get started:
+
+1. **Fork the repository**
+2. **Create a feature branch**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+3. **Make your changes**
+4. **Add tests** (if applicable)
+5. **Submit a pull request**
+
+### Development Setup
+```bash
+git clone https://github.com/your-username/mosaic.git
+cd mosaic
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 - [LangChain](https://langchain.com) for the AI framework
 - [OpenAI](https://openai.com) for GPT models
 - [Tavily](https://tavily.com) for web search capabilities
 - [FAISS](https://github.com/facebookresearch/faiss) for vector search
+- [MCP](https://modelcontextprotocol.io/) for the server protocol
 
-## Support & Contact
+## 🆘 Support & Contact
 
-This project is maintained by Garvit Mehra. For questions, open an issue on GitHub.
+- **Issues**: Open an issue on GitHub
+- **Discussions**: Use GitHub Discussions
+- **Email**: Contact through GitHub profile
 
-## Roadmap
+## 🗺️ Roadmap
 
-- [ ] Voice interface integration
-- [ ] Multi-language support
-- [ ] Advanced analytics dashboard
-- [ ] Plugin system for custom agents
-- [ ] Mobile app companion
-- [ ] Enterprise SSO integration
+- [x] **Custom MCP Integration**: Multi-agent client framework connecting to MCP servers
+- [ ] **Web UI**: Add modern web interface for easier interaction
+- [ ] **Voice Interface**: Integrate speech-to-text and text-to-speech capabilities
+- [ ] **Free Web Search**: Implement alternative web search without Tavily API dependency
+- [ ] **Custom Client Development**: Develop native client without LangChain/LangGraph dependencies
+- [ ] **Multi-language Support**: Add support for multiple languages
+- [ ] **Advanced Analytics Dashboard**: Real-time monitoring and analytics
+- [ ] **Plugin System**: Extensible plugin architecture for custom agents
+- [ ] **Enterprise Features**: SSO integration and advanced security
+- [ ] **Real-time Collaboration**: Multi-user collaboration features
+- [ ] **Advanced Caching**: Performance optimization and caching
 
 ---
 
-*Made with care by Garvit Mehra* 
+*Made with ❤️ by Garvit Mehra*
+
+**Ready to build amazing multi-agent applications with MCP servers? Start with Mosaic! 🚀** 
