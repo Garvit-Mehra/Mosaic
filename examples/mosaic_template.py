@@ -14,6 +14,7 @@ Usage:
     python mosaic_template.py
 """
 
+__import__('sys').path.append('..')
 from client import Mosaic
 
 # =============================================================================
