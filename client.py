@@ -146,7 +146,7 @@ class Mosaic:
                     continue
                 response, agent_name = await self.process_message(user_input)
                 display_name = agent_display_names.get(agent_name, agent_name.title())
-                print(f"Mosaic ({display_name}): {response}")
+                print(f"Mosaic: {response}")
             except KeyboardInterrupt:
                 print("\n\nSession interrupted. Goodbye!")
                 break
