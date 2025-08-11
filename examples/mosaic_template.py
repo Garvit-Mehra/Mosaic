@@ -19,7 +19,6 @@ def main():
     mosaic = Mosaic.create(
         server_configs=SERVER_CONFIGS,
         web_search=True,
-        rag=True
     )
     mosaic.run()
 
