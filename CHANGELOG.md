@@ -2,9 +2,15 @@
 
 All notable changes to the Mosaic project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-08-11
+
+### Changed
+- **Client**: Cleaned up client.py and added proper documentation with comments
+- **New Model**: Updated code to use the GPT-5 model released by OpenAI
+
+### Fixed
+- **Tavily**: Fixed Tavily-Langchain depriciation error warning, to use new integrated library
 
 ## [1.1.0] - 2025-06-27
 
@@ -19,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Professional Project Structure**: Clean organization for GitHub distribution
 
 ### Changed
-- **Enhanced README.md**: Comprehensive documentation with emojis, clear sections, and step-by-step guides
+- **Enhanced README.md**: Comprehensive documentation with clear sections, and step-by-step guides
 - **Improved requirements.txt**: Better organization with categorized dependencies and system requirements
 - **Better Code Documentation**: Enhanced comments and docstrings throughout the codebase
 - **Simplified Configuration**: Streamlined server configuration and setup process
