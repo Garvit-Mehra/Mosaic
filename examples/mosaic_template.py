@@ -1,25 +1,8 @@
 #!/usr/bin/env python3
-"""
-Mosaic Usage Template
-=====================
-
-This template demonstrates how to use the modular Mosaic client with your own server configurations.
-You can add/remove servers, and toggle web search or RAG, all from this file.
-
-Author: Garvit Mehra
-Version: 1.1.0
-License: MIT
-
-Usage:
-    python mosaic_template.py
-"""
-
 __import__('sys').path.append('..')
 from client import Mosaic
 
-# =============================================================================
 # Server Configurations
-# =============================================================================
 
 SERVER_CONFIGS = [
     {
@@ -29,9 +12,7 @@ SERVER_CONFIGS = [
     },
 ]
 
-# =============================================================================
 # Main Function
-# =============================================================================
 
 def main():
     """Main function to run the Mosaic client."""
@@ -42,9 +23,7 @@ def main():
     )
     mosaic.run()
 
-# =============================================================================
 # Main Execution
-# =============================================================================
 
 if __name__ == "__main__":
     main()
