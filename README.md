@@ -179,18 +179,6 @@ Each agent has specific capabilities:
 - Provides context for follow-up questions
 - Manages session state and memory
 
-## 🖥️ Streamlit UI
-
-Mosaic includes a modern Streamlit web interface for easy interaction:
-
-### Features
-- **Conversation Management**: Create, view, and manage multiple conversations
-- **Real-time Chat**: Interactive chat interface with Mosaic agents
-- **Agent Status**: See which agents are available and their status
-- **Context Window**: View conversation context and history
-- **Dark Theme**: Modern dark UI inspired by ChatGPT
-- **Responsive Design**: Works on desktop and mobile
-
 ## 📚 Usage Examples
 
 ### Built-in Web Search
