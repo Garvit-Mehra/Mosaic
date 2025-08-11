@@ -4,8 +4,8 @@
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.1.0-orange.svg)](VERSION)
-[![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4-orange.svg)](https://openai.com)
+[![Version](https://img.shields.io/badge/Version-1.2.0-orange.svg)](VERSION)
+[![OpenAI GPT-5](https://img.shields.io/badge/OpenAI-GPT--5-blue.svg)](https://openai.com)
 [![LangChain](https://img.shields.io/badge/LangChain-0.1+-yellow.svg)](https://langchain.com)
 [![MCP](https://img.shields.io/badge/MCP-1.0+-purple.svg)](https://modelcontextprotocol.io/)
 
@@ -107,11 +107,14 @@ flowchart TD
 
 6. **Run Mosaic**
    ```bash
-   # Option 1: Direct usage
-   python client.py
-   
-   # Option 2: Using template configuration
+   cd examples
    python mosaic_template.py
+   ```
+
+7. **Test the integration (optional)**
+   ```bash
+   # Make sure the database server is running first
+   python servers/database_server.py
    ```
 
 ## ⚙️ Configuration
@@ -136,7 +139,7 @@ Edit `client.py` to customize:
 
 ```python
 # Model and AI settings
-MODEL_NAME = "gpt-4.1-mini"  # Change AI model
+MODEL_NAME = "gpt-5-nano"  # Change AI model
 MAX_HISTORY_EXCHANGES = 5    # Conversation memory length
 ```
 
@@ -175,6 +178,18 @@ Each agent has specific capabilities:
 - Maintains conversation history across agents
 - Provides context for follow-up questions
 - Manages session state and memory
+
+## 🖥️ Streamlit UI
+
+Mosaic includes a modern Streamlit web interface for easy interaction:
+
+### Features
+- **Conversation Management**: Create, view, and manage multiple conversations
+- **Real-time Chat**: Interactive chat interface with Mosaic agents
+- **Agent Status**: See which agents are available and their status
+- **Context Window**: View conversation context and history
+- **Dark Theme**: Modern dark UI inspired by ChatGPT
+- **Responsive Design**: Works on desktop and mobile
 
 ## 📚 Usage Examples
 
@@ -221,13 +236,13 @@ mosaic/
 │   ├── mosaic_template.py    # Template for custom configurations
 ├── servers/                  # Example MCP servers
 │   ├── database_server.py    # Example SQLite database server
-│   ├── calendar_server.py    # Example calendar server
 │   └── db.sqlite             # Database file (auto-created)
 ├── utils/                    # Utility modules
 │   ├── __init__.py           # Package initialization
 │   ├── RAGTools.py           # RAG/document retrieval tools
 │   ├── ProcessPDF.py         # PDF/image processing tools
-│   └── Clients.py            # Legacy MCP client implementations
+│   ├── Clients.py            # Legacy MCP client implementations
+│   └── ConversationDB.py     # Conversation database manager
 └── mosaic.log                # Log file (auto-created)
 ```
 
@@ -331,28 +346,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [FAISS](https://github.com/facebookresearch/faiss) for vector search
 - [MCP](https://modelcontextprotocol.io/) for the server protocol
 
-## 🆘 Support & Contact
-
-- **Issues**: Open an issue on GitHub
-- **Discussions**: Use GitHub Discussions
-- **Email**: Contact through GitHub profile
-
-## 🗺️ Roadmap
-
-- [x] **Custom MCP Integration**: Multi-agent client framework connecting to MCP servers
-- [ ] **Web UI**: Add modern web interface for easier interaction
-- [ ] **Voice Interface**: Integrate speech-to-text and text-to-speech capabilities
-- [ ] **Free Web Search**: Implement alternative web search without Tavily API dependency
-- [ ] **Custom Client Development**: Develop native client without LangChain/LangGraph dependencies
-- [ ] **Multi-language Support**: Add support for multiple languages
-- [ ] **Advanced Analytics Dashboard**: Real-time monitoring and analytics
-- [ ] **Plugin System**: Extensible plugin architecture for custom agents
-- [ ] **Enterprise Features**: SSO integration and advanced security
-- [ ] **Real-time Collaboration**: Multi-user collaboration features
-- [ ] **Advanced Caching**: Performance optimization and caching
 
 ---
 
-*Made with ❤️ by Garvit Mehra*
+*Made with ❤️ by Mosiac Team*
 
 **Ready to build amazing multi-agent applications with MCP servers? Start with Mosaic! 🚀** 
