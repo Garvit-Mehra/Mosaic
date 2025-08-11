@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""
-Mosaic - Modular Multi-Agent Tools for Python (MCP Server)
-
-A modern toolkit for building, combining, and experimenting with modular multi-agent tools.
-
-Author: Garvit Mehra
-Version: 1.0.0
-License: MIT
-"""
-
 import os
 import sqlite3
 import logging
@@ -673,3 +663,4 @@ if __name__ == "__main__":
     # Start the MCP server
     logger.info("Starting Mosaic Database Server...")
     mcp.run(transport="sse")
+
