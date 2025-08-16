@@ -11,7 +11,7 @@ SERVER_CONFIGS = [
     },
 ]
 
-MODEL_NAME = "mistral"
+MODEL_NAME = "Model Name"
 
 # Main Function
 def main():
