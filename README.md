@@ -1,6 +1,6 @@
 # Mosaic - Multi-Agent Client for MCP Servers
 
-A modern multi-agent client framework that connects to MCP (Model Context Protocol) servers using LangChain and local LLMs.
+A modern multi-agent client framework that connects to MCP (Model Context Protocol) servers using LangChain and locally running LLMs (via [Ollama](https://ollama.com)).
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -20,35 +20,16 @@ It supports:
 - Retrieval-Augmented Generation (RAG)  
 - MCP server connectivity  
 - Extensible agent framework  
+- Local LLMs via Ollama (choose any available model, e.g., Llama 3, Mistral, Gemma, etc.)  
 
 ---
 
 ## Key Features
 
 - Multi-agent client with intelligent query routing  
-- Web search and document analysis (RAG) built-in  
-- Connects to any MCP-compatible server  
-- Works with local LLMs via [Ollama](https://ollama.com)  
-- Easy to extend with new agents and tools  
-
----
-
-## System Requirements for Running Mistral 7B via Ollama
-
-To run Mistral 7B locally using Ollama, here are the essential hardware and setup specifications:
-
-| Component       | Minimum Requirements                          | Recommended Setup (Smoother Performance)           |
-|-----------------|-----------------------------------------------|----------------------------------------------------|
-| **System RAM**  | 16 GB (for CPU-only or 4/5-bit quantized runs) | 32 GB+ for more headroom and multitasking |
-| **GPU (VRAM)**  | 6 GB+ VRAM may work; 12 GB (e.g., RTX 3060) recommended | RTX 3090 (24 GB) or better for faster and smoother runs |
-| **CPU**         | Mid-range multi-core CPU (e.g., i7 8th gen or Ryzen 5 3rd gen) | Higher core counts (i9 / Ryzen 7+) for heavier workloads |
-| **Storage**     | 10-15 GB (for Ollama, model download) | 15 GB+ if you manage multiple models or data |
-| **Software**    | Ollama installed, OS: Windows 10+ / macOS / Ubuntu 20.04+ | Same, with optional CUDA setup on GPU machines |
-
-### Notes
-- **Quantization** (4-bit or 5-bit) reduces both VRAM and RAM usage significantly.  
-- **CPU-only setups** are possible but slower; high-end CPUs with 64 GB RAM recommended.  
-- **Ollama** simplifies deployment; model size for Mistral 7B typically 4–8 GB.  
+- Built-in web search and document analysis (RAG)  
+- Works with any model available through Ollama  
+- Easy extension with new agents and MCP servers  
 
 ---
 
@@ -76,10 +57,9 @@ To run Mistral 7B locally using Ollama, here are the essential hardware and setu
     ```bash
     pip install -r requirements.txt
     ```
-4. **Download and run Mistral via Ollama**
+4. **Download and run the required model via Ollama**
     ```bash
-    ollama pull mistral
-    ollama run mistral
+    ollama run [any model of your choice]
     ```
 5. **Run Mosaic**
     ```bash
@@ -91,6 +71,10 @@ To run Mistral 7B locally using Ollama, here are the essential hardware and setu
 
 ## Configuration
 
+**Model configuration**
+
+To change the model you are using, update ```model_config``` within ```mosaic_template.py```
+
 **MCP Server Example**
 ```python
 {
@@ -100,13 +84,6 @@ To run Mistral 7B locally using Ollama, here are the essential hardware and setu
     "transport": "sse"
 }
 ```
-
-**Client Configuration**
-```python
-MODEL_NAME = "mistral"   # Change AI model
-MAX_HISTORY_EXCHANGES = 5
-```
-
 
 ---
 
@@ -126,6 +103,7 @@ The full license text can be found in the [LICENSE](LICENSE) file.
 - LangChain for the AI framework
 - MCP for the server protocol
 - Tavily for web search integration
+- Ollama for local LLM deployment
 - Community contributors
 
 ---
