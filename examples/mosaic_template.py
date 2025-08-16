@@ -3,7 +3,6 @@ __import__('sys').path.append('..')
 from client import Mosaic
 
 # Server Configurations
-
 SERVER_CONFIGS = [
     {
         "name": "database_server",
@@ -13,7 +12,6 @@ SERVER_CONFIGS = [
 ]
 
 # Main Function
-
 def main():
     """Main function to run the Mosaic client."""
     mosaic = Mosaic.create(
@@ -23,6 +21,5 @@ def main():
     mosaic.run()
 
 # Main Execution
-
 if __name__ == "__main__":
     main()
