@@ -42,8 +42,8 @@ To run Mistral 7B locally using Ollama, here are the essential hardware and setu
 | **System RAM**  | 16 GB (for CPU-only or 4/5-bit quantized runs) | 32 GB+ for more headroom and multitasking |
 | **GPU (VRAM)**  | 6 GB+ VRAM may work; 12 GB (e.g., RTX 3060) recommended | RTX 3090 (24 GB) or better for faster and smoother runs |
 | **CPU**         | Mid-range multi-core CPU (e.g., i7 8th gen or Ryzen 5 3rd gen) | Higher core counts (i9 / Ryzen 7+) for heavier workloads |
-| **Storage**     | 100 GB SSD (for OS, Ollama, model download) | NVMe 500 GB+ if you manage multiple models or data |
-| **Software**    | Ollama installed, OS: Windows 10 / macOS / Ubuntu 20.04+ | Same, with optional CUDA setup on GPU machines |
+| **Storage**     | 10-15 GB (for Ollama, model download) | 15 GB+ if you manage multiple models or data |
+| **Software**    | Ollama installed, OS: Windows 10+ / macOS / Ubuntu 20.04+ | Same, with optional CUDA setup on GPU machines |
 
 ### Notes
 - **Quantization** (4-bit or 5-bit) reduces both VRAM and RAM usage significantly.  
