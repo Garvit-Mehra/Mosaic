@@ -2,6 +2,13 @@
 
 All notable changes to the Mosaic project will be documented in this file.
 
+## [1.3.1] - 2025-08-16
+
+### Changed
+- **Model Config**: Now any open source model can be used to run Mosiac, via Ollama
+
+---
+
 ## [1.3.0] - 2025-08-16
 
 ### Changed
