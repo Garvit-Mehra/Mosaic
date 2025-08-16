@@ -2,6 +2,22 @@
 
 All notable changes to the Mosaic project will be documented in this file.
 
+## [1.3.0] - 2025-08-16
+
+### Changed
+- **Authors**: Updated project authorship to *Mosaic Team* instead of a single contributor
+- **License**: Project license updated from MIT to new team license
+- **Client**: Major cleanup and refactor of `client.py` for improved modularity and maintainability
+- **Client**: Enhanced logging, error handling, and async request support
+- **Client**: Improved prompt handling to reduce token usage and running costs
+- **README.md**: Updated with new authorship, license, and minimum system requirements for Ollama/Mistral
+
+### Added
+- **Client**: Support for smaller, optimized prompts for efficiency
+- **Client**: Better markdown-style output formatting for consistency
+- **Documentation**: Clearer contribution guidelines reflecting team-based development
+
+---
 
 ## [1.2.0] - 2025-08-11
 
@@ -11,6 +27,8 @@ All notable changes to the Mosaic project will be documented in this file.
 
 ### Fixed
 - **Tavily**: Fixed Tavily-Langchain depriciation error warning, to use new integrated library
+
+---
 
 ## [1.1.0] - 2025-06-27
 
@@ -36,6 +54,8 @@ All notable changes to the Mosaic project will be documented in this file.
 - **Documentation Issues**: Clearer setup instructions and troubleshooting guides
 - **Configuration Clarity**: Better examples and templates for server setup
 - **Installation Process**: Simplified dependency management and environment setup
+
+---
 
 ## [1.0.0] - 2025-06-23
 
