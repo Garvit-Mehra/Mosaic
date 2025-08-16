@@ -5,7 +5,7 @@ Mosaic - Modular Multi-Agent Tools for Python
 A modern toolkit for building, combining, and experimenting with modular multi-agent tools.
 
 Authors: Mosiac Team
-Version: 1.3.0
+Version: 1.3.1
 License: Non-Commercial, No-Distribution (Based on MIT)
 """
 
@@ -47,7 +47,6 @@ logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Core configuration constants
-MODEL_NAME = "mistral"
 MAX_HISTORY_EXCHANGES = 5
 
 # Validate required API key early
@@ -107,16 +106,17 @@ class Mosaic:
     """
     Main Mosaic client class that manages the multi-agent system.
     """
-    def __init__(self, agent_specs, inactive_agents, server_configs, web_search, conversation_id=None, user_id=None):
+    def __init__(self, agent_specs, inactive_agents, server_configs, web_search, conversation_id=None, user_id=None, model_config=None):
         # Conversation history (system + user + assistant messages)
         self.conversation_id = conversation_id
         self.user_id = user_id
         self.history = deque(maxlen=MAX_HISTORY_EXCHANGES * 2)
         self.last_agent_used = None
-        self.classifier_llm = ChatOllama(model=MODEL_NAME, temperature=0.0, reasoning=False)  # Used for agent selection
+        self.classifier_llm = ChatOllama(model=model_config, temperature=0.0, reasoning=False)  # Used for agent selection
         self.agent_specs = agent_specs
         self.inactive_agents = inactive_agents
         self.server_configs = server_configs
+        self.model_config = model_config
         self.web_search = web_search
         # Load conversation history if conversation_id is provided
         if conversation_id is not None:
@@ -139,12 +139,15 @@ class Mosaic:
                     "All answers must be short and direct."
                 )
             })
+
     @classmethod
-    def create(cls, server_configs: List[Dict[str, Any]], web_search: bool = True):
+    def create(cls, server_configs: List[Dict[str, Any]], web_search: bool = True, model_config=None):
         # Async wrapper to allow synchronous entrypoint
         async def _acreate():
-            agent_specs, inactive_agents = await cls._initialize_agents(server_configs, web_search)
-            return cls(agent_specs, inactive_agents, server_configs, web_search)
+            # Create a temporary instance to initialize agents
+            temp_instance = cls([], [], server_configs, web_search, model_config=model_config)
+            agent_specs, inactive_agents = await temp_instance._initialize_agents(server_configs, web_search)
+            return cls(agent_specs, inactive_agents, server_configs, web_search, model_config=model_config)
         return asyncio.run(_acreate())
 
     def run(self):
@@ -178,8 +181,7 @@ class Mosaic:
                 logger.error(f"Unexpected error: {e}")
                 print(f"\nAn unexpected error occurred: {e}")
 
-    @staticmethod
-    async def _initialize_agents(server_configs, web_search) -> Tuple[List[Dict[str, Any]], List[str]]:
+    async def _initialize_agents(self, server_configs, web_search) -> Tuple[List[Dict[str, Any]], List[str]]:
         agents = []
         inactive = []
 
@@ -190,7 +192,7 @@ class Mosaic:
             "name": "general",
             "description": "For general conversation and follow-ups.",
             "agent": create_react_agent(
-                ChatOllama(model=MODEL_NAME, reasoning=False),
+                ChatOllama(model=self.model_config, reasoning=False),
                 tools=[],
                 prompt=(
                     "You are Mosaic's general assistant. "
@@ -209,7 +211,7 @@ class Mosaic:
                 "name": "web",
                 "description": "For real-time internet queries.",
                 "agent": create_react_agent(
-                    ChatOllama(model=MODEL_NAME, reasoning=False),
+                    ChatOllama(model=self.model_config, reasoning=False),
                     tools=[TavilySearch(api_key=TAVILY_API_KEY, max_results=2)],
                     prompt=(
                         "You are Mosaic's web agent. "
@@ -232,7 +234,7 @@ class Mosaic:
                     "name": config["name"],
                     "description": config["description"],
                     "agent": create_react_agent(
-                        ChatOllama(model=MODEL_NAME, reasoning=False),
+                        ChatOllama(model=self.model_config, reasoning=False),
                         tools=mcp_tools,
                         prompt=(
                             f"You are Mosaic's {config['name'].replace('_', ' ').title()} agent. "
@@ -253,7 +255,7 @@ class Mosaic:
             "name": "rag",
             "description": "For document queries.",
             "agent": create_react_agent(
-                ChatOllama(model=MODEL_NAME, reasoning=False),
+                ChatOllama(model=self.model_config, reasoning=False),
                 tools=[load_document, query_documents, list_documents, clear_documents],
                 prompt=(
                     "You are Mosaic's RAG agent. "
@@ -385,3 +387,150 @@ class Mosaic:
                 message_data={}
             )
             return error_message, "error", self.conversation_id if self.conversation_id else -1
+
+    async def stream_message(self, user_input: str) -> AsyncGenerator[Dict[str, Any], None]:
+        try:
+            error_msg, agent_spec, conv_id = await self._prepare_message(user_input)
+            if error_msg:
+                yield {
+                    "chunk": {
+                        "message": error_msg,
+                        "type": "text",
+                        "metadata": {
+                            "chunk_id": 1,
+                            "timestamp": datetime.datetime.utcnow().isoformat(),
+                            "conversation_id": conv_id,
+                            "user_id": self.user_id,
+                            "agent": None
+                        },
+                        "error": {}
+                    }
+                }
+                yield {
+                    "chunk": {
+                        "message": "",
+                        "type": "end",
+                        "metadata": {
+                            "chunk_id": 2,
+                            "timestamp": datetime.datetime.utcnow().isoformat(),
+                            "conversation_id": conv_id,
+                            "user_id": self.user_id,
+                            "agent": None
+                        },
+                        "error": {}
+                    }
+                }
+                return
+            # Streaming response
+            chunk_id = 1
+            full_message = ""
+            config = {"configurable": {"thread_id": agent_spec["thread_id"]}}
+            async for event in agent_spec["agent"].astream({"messages": list(self.history)}, config):
+                if "messages" in event and event["messages"]:
+                    chunk_content = event["messages"][-1].content
+                    if chunk_content:
+                        full_message += chunk_content
+                        yield {
+                            "chunk": {
+                                "message": chunk_content,
+                                "type": "text",
+                                "metadata": {
+                                    "chunk_id": chunk_id,
+                                    "timestamp": datetime.datetime.utcnow().isoformat(),
+                                    "conversation_id": conv_id,
+                                    "user_id": self.user_id,
+                                    "agent": agent_spec["name"]
+                                },
+                                "error": {}
+                            }
+                        }
+                        chunk_id += 1
+            # Append full message to history and DB
+            self.history.append({"role": "assistant", "content": full_message})
+            conversation_manager.add_message(
+                conversation_id=self.conversation_id,
+                role="assistant",
+                content=full_message,
+                agent=agent_spec["name"],
+                message_data={}
+            )
+            # Send end chunk
+            yield {
+                "chunk": {
+                    "message": "",
+                    "type": "end",
+                    "metadata": {
+                        "chunk_id": chunk_id,
+                        "timestamp": datetime.datetime.utcnow().isoformat(),
+                        "conversation_id": conv_id,
+                        "user_id": self.user_id,
+                        "agent": agent_spec["name"]
+                    },
+                    "error": {}
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error streaming message: {e}")
+            yield {
+                "chunk": {
+                    "message": "I encountered an error while processing your request.",
+                    "type": "text",
+                    "metadata": {
+                        "chunk_id": 1,
+                        "timestamp": datetime.datetime.utcnow().isoformat(),
+                        "conversation_id": self.conversation_id,
+                        "user_id": self.user_id,
+                        "agent": None
+                    },
+                    "error": {"code": 500, "message": str(e)}
+                }
+            }
+            yield {
+                "chunk": {
+                    "message": "",
+                    "type": "end",
+                    "metadata": {
+                        "chunk_id": 2,
+                        "timestamp": datetime.datetime.utcnow().isoformat(),
+                        "conversation_id": self.conversation_id,
+                        "user_id": self.user_id,
+                        "agent": None
+                    },
+                    "error": {}
+                }
+            }
+
+class MosaicAPI:
+    def __init__(self, server_configs: List[Dict[str, Any]], web_search: bool = True):
+        self.server_configs = server_configs
+        self.web_search = web_search
+        self.mosaic: Optional[Mosaic] = None
+        self.conversation_id: Optional[int] = None
+        self.user_id: Optional[str] = None
+
+    async def initialize(self, conversation_id: Optional[int] = None, user_id: Optional[str] = None):
+        # Initialize Mosaic instance asynchronously
+        self.conversation_id = conversation_id
+        self.user_id = user_id
+        self.mosaic = await self._create_mosaic()
+
+    async def _create_mosaic(self):
+        # Build and return a Mosaic instance
+        agent_specs, inactive_agents = await Mosaic._initialize_agents(self.server_configs, self.web_search)
+        return Mosaic(agent_specs, inactive_agents, self.server_configs, self.web_search, conversation_id=self.conversation_id, user_id=self.user_id)
+
+    async def chat(self, message: str, conversation_id: Optional[int] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
+        # Public API for non-streaming chat with Mosaic
+        if not self.mosaic or (conversation_id and conversation_id != self.conversation_id):
+            # Re-initialize if conversation_id changes
+            await self.initialize(conversation_id=conversation_id, user_id=user_id)
+        response, agent, conv_id = await self.mosaic.process_message(message)
+        return {"response": response, "agent": agent, "conversation_id": conv_id}
+
+    async def chat_stream(self, message: str, conversation_id: Optional[int] = None, user_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
+        # Public API for streaming chat with Mosaic
+        if not self.mosaic or (conversation_id and conversation_id != self.conversation_id):
+            # Re-initialize if conversation_id changes
+            await self.initialize(conversation_id=conversation_id, user_id=user_id)
+        async for chunk in self.mosaic.stream_message(message):
+            yield f"data: {json.dumps(chunk)}\n\n"
