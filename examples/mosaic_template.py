@@ -11,11 +11,14 @@ SERVER_CONFIGS = [
     },
 ]
 
+MODEL_NAME = "mistral"
+
 # Main Function
 def main():
     """Main function to run the Mosaic client."""
     mosaic = Mosaic.create(
         server_configs=SERVER_CONFIGS,
+        model_config=MODEL_NAME,
         web_search=True,
     )
     mosaic.run()
