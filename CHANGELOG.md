@@ -2,7 +2,7 @@
 
 All notable changes to the Mosaic project will be documented in this file.
 
-## [2.0.0] - 2025-07-13
+## [2.0.0] - 2026-07-13
 
 ### Added
 - **Full-Stack Application**: Next.js 15 frontend with real-time streaming chat UI
