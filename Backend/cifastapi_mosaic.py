@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from client import MosaicAPI
 from pydantic import BaseModel
 from typing import Optional, List
@@ -6,7 +6,12 @@ from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from utils.ConversationDB import ConversationManager
+from utils.logger import get_logger, get_request_logger
 import json
+import time
+
+logger = get_logger("api")
+request_logger = get_request_logger()
 
 # --- Server configuration (all MCP servers are optional) ---
 SERVER_CONFIGS = [
@@ -29,8 +34,15 @@ conversation_db = ConversationManager()
 # --- Lifespan (runs on startup/shutdown) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("🚀 Mosaic backend starting up...")
     await mosaic_api.initialize()
+    status = await mosaic_api.get_status()
+    logger.info(f"✓ Agents loaded: {status['agents']}")
+    if status['inactive_servers']:
+        logger.warning(f"⚠ Inactive MCP servers: {status['inactive_servers']}")
+    logger.info("✓ Backend ready — accepting requests")
     yield
+    logger.info("Mosaic backend shutting down...")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -43,6 +55,46 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# --- Request logging middleware ---
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    
+    # Log the incoming request
+    body = None
+    if request.method in ("POST", "PUT", "PATCH"):
+        try:
+            body_bytes = await request.body()
+            body = body_bytes.decode("utf-8")[:500]  # Truncate large bodies
+        except Exception:
+            body = "<unreadable>"
+
+    response = await call_next(request)
+    
+    duration_ms = (time.time() - start_time) * 1000
+    
+    # Log entry
+    log_line = (
+        f"{request.method} {request.url.path} → {response.status_code} "
+        f"({duration_ms:.0f}ms)"
+    )
+    
+    if response.status_code >= 500:
+        logger.error(log_line)
+    elif response.status_code >= 400:
+        logger.warning(log_line)
+    
+    # Always write to request log file
+    request_logger.info(
+        f"{request.method} {request.url.path} | "
+        f"status={response.status_code} | "
+        f"duration={duration_ms:.0f}ms | "
+        f"body={body if body else '-'}"
+    )
+    
+    return response
 
 
 # --- Request/Response Models ---
@@ -76,6 +128,9 @@ async def chat(req: ChatRequest):
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
         convo = conversation_db.create_conversation(title=title, user_id=req.user_id)
         conv_id = convo.id
+        logger.info(f"Created new conversation id={conv_id} title='{title}'")
+
+    logger.info(f"Chat request: conv={conv_id} message='{req.message[:80]}...' user={req.user_id}")
 
     # Get AI response
     result = await mosaic_api.chat(
@@ -83,6 +138,8 @@ async def chat(req: ChatRequest):
         conversation_id=conv_id,
         user_id=req.user_id,
     )
+
+    logger.info(f"Chat response: conv={conv_id} agent={result.get('agent')} length={len(result['response'])}")
 
     # Persist both messages
     conversation_db.add_message(conv_id, "user", req.message)
@@ -102,11 +159,6 @@ async def chat(req: ChatRequest):
 async def chat_stream(req: ChatRequest):
     """
     Stream a response via Server-Sent Events.
-    Each event is a JSON object with a 'type' field:
-      - {"type": "agent", "agent": "general"}
-      - {"type": "token", "content": "Hello"}
-      - {"type": "done", "full_response": "...", "conversation_id": 5}
-      - {"type": "error", "content": "..."}
     """
     conv_id = req.conversation_id
 
@@ -115,10 +167,14 @@ async def chat_stream(req: ChatRequest):
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
         convo = conversation_db.create_conversation(title=title, user_id=req.user_id)
         conv_id = convo.id
+        logger.info(f"[stream] Created new conversation id={conv_id}")
+
+    logger.info(f"[stream] Chat request: conv={conv_id} message='{req.message[:80]}'")
 
     async def event_generator():
         full_response = ""
         agent_name = None
+        token_count = 0
 
         async for chunk in mosaic_api.chat_stream(
             req.message,
@@ -127,6 +183,9 @@ async def chat_stream(req: ChatRequest):
         ):
             if chunk["type"] == "agent":
                 agent_name = chunk["agent"]
+                logger.info(f"[stream] Routed to agent: {agent_name}")
+            elif chunk["type"] == "token":
+                token_count += 1
             elif chunk["type"] == "done":
                 full_response = chunk.get("full_response", "")
             
@@ -136,6 +195,8 @@ async def chat_stream(req: ChatRequest):
         conversation_db.add_message(conv_id, "user", req.message)
         if full_response:
             conversation_db.add_message(conv_id, "assistant", full_response, agent=agent_name)
+
+        logger.info(f"[stream] Complete: conv={conv_id} agent={agent_name} tokens={token_count} length={len(full_response)}")
 
         # Send final event with conversation_id
         yield f"data: {json.dumps({'type': 'done', 'conversation_id': conv_id, 'full_response': full_response, 'agent': agent_name})}\n\n"
@@ -270,6 +331,8 @@ async def add_server(req: AddServerRequest):
         "url": req.url,
     }
 
+    logger.info(f"Adding MCP server: name={req.name} url={req.url}")
+
     # Add to the config list
     mosaic_api.server_configs.append(new_config)
     if mosaic_api.mosaic:
@@ -280,6 +343,11 @@ async def add_server(req: AddServerRequest):
     result = await mosaic_api.refresh_servers()
 
     connected = req.name in result.get("connected", [])
+    if connected:
+        logger.info(f"✓ Server '{req.name}' connected and agent loaded")
+    else:
+        logger.warning(f"⚠ Server '{req.name}' added but not reachable")
+
     return {
         "message": f"Server '{req.name}' added." + (" Connected and agent loaded." if connected else " Server not reachable — will retry on next refresh."),
         "connected": connected,
@@ -304,6 +372,7 @@ async def remove_server(server_name: str):
         if server_name in mosaic_api.mosaic.inactive_agents:
             mosaic_api.mosaic.inactive_agents.remove(server_name)
 
+    logger.info(f"Removed MCP server: {server_name}")
     return {"message": f"Server '{server_name}' removed."}
 
 
@@ -345,9 +414,61 @@ async def refresh_servers():
     Hot-reload MCP servers. Call this after starting a database or calendar server
     to have Mosaic pick it up without restarting the backend.
     """
+    logger.info("Refreshing MCP servers...")
     result = await mosaic_api.refresh_servers()
+    logger.info(f"Refresh complete: connected={result['connected']} inactive={result['inactive']}")
     return {
         "message": "Server refresh complete",
         "connected_mcp_servers": result["connected"],
         "inactive_mcp_servers": result["inactive"],
     }
+
+
+# --- Logs Endpoint ---
+@app.get("/logs")
+async def get_logs(lines: int = 100, level: Optional[str] = None):
+    """
+    Get recent log entries. Useful for debugging from the frontend.
+    - lines: number of recent lines to return (default 100)
+    - level: filter by level (ERROR, WARNING, INFO, DEBUG)
+    """
+    import os
+    log_file = os.path.join(os.path.dirname(__file__), "logs", "mosaic.log")
+    
+    if not os.path.exists(log_file):
+        return {"logs": [], "message": "No log file found yet."}
+    
+    try:
+        with open(log_file, "r") as f:
+            all_lines = f.readlines()
+        
+        # Get last N lines
+        recent = all_lines[-lines:]
+        
+        # Filter by level if specified
+        if level:
+            level_upper = level.upper()
+            recent = [l for l in recent if f"| {level_upper}" in l]
+        
+        return {"logs": [l.rstrip() for l in recent], "total_lines": len(all_lines)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading logs: {str(e)}")
+
+
+@app.get("/logs/errors")
+async def get_error_logs(lines: int = 50):
+    """Get recent error-only logs for quick diagnosis."""
+    import os
+    log_file = os.path.join(os.path.dirname(__file__), "logs", "mosaic_errors.log")
+    
+    if not os.path.exists(log_file):
+        return {"logs": [], "message": "No errors logged yet."}
+    
+    try:
+        with open(log_file, "r") as f:
+            all_lines = f.readlines()
+        
+        recent = all_lines[-lines:]
+        return {"logs": [l.rstrip() for l in recent], "total_lines": len(all_lines)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading error logs: {str(e)}")

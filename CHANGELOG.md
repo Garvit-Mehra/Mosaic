@@ -15,6 +15,11 @@ All notable changes to the Mosaic project will be documented in this file.
 - **Conversation CRUD**: Full REST API for conversations (create, list, get, update, delete)
 - **Auto-Conversation Creation**: First message auto-creates a conversation if none specified
 - **Collapsible Sidebar**: Shows real conversations from the database with delete support
+- **Centralized Logging System**: Rotating file logs with separate error log and request log
+- **Colored Console Output**: Level-colored terminal logs for dev experience
+- **Request Logging Middleware**: Every HTTP request logged with method, path, status, duration, body
+- **Log API Endpoints**: `GET /logs` and `GET /logs/errors` for viewing logs from the browser
+- **Configurable Log Level**: Set `LOG_LEVEL` in `.env` (DEBUG, INFO, WARNING, ERROR)
 
 ### Changed
 - **Switched to Ollama**: Removed OpenAI dependency — all inference runs locally via Ollama

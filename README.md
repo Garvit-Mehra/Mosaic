@@ -62,6 +62,7 @@ pip install -r requirements.txt
 Create `Backend/.env`:
 ```env
 TAVILY_API_KEY=your_tavily_key_here
+LOG_LEVEL=INFO   # DEBUG, INFO, WARNING, or ERROR
 ```
 
 Create `Frontend/.env`:
@@ -137,6 +138,9 @@ Then go to **Settings** in the UI and click **Refresh All**, or add new servers 
 | `DELETE` | `/servers/:name` | Remove MCP server |
 | `POST` | `/servers/refresh` | Hot-reload all servers |
 | `GET` | `/servers/:name/tools` | List tools for a server |
+| `GET` | `/logs?lines=100&level=ERROR` | View recent logs |
+| `GET` | `/logs/errors` | View error-only logs |
+| `GET` | `/status` | Active agents and server status |
 
 ---
 
@@ -166,27 +170,71 @@ SERVER_CONFIGS = [
 
 ```
 Mosaic/
+├── README.md
+├── CHANGELOG.md
+├── LICENSE
+├── requirements.txt
+├── .gitignore
 ├── Backend/
-│   ├── cifastapi_mosaic.py    # FastAPI app (endpoints)
+│   ├── .gitignore
+│   ├── cifastapi_mosaic.py    # FastAPI app (endpoints + middleware)
 │   ├── client.py              # Mosaic agent orchestration
+│   ├── logs/                  # Auto-created log files (gitignored)
+│   │   ├── mosaic.log         # Full debug log (rotating, 10MB)
+│   │   ├── mosaic_errors.log  # Errors only (rotating, 5MB)
+│   │   └── requests.log       # HTTP request log (rotating, 10MB)
 │   ├── utils/
+│   │   ├── logger.py          # Centralized logging configuration
 │   │   ├── ConversationDB.py  # SQLite conversation storage
 │   │   ├── RAGTools.py        # Document Q&A tools
 │   │   └── ProcessPDF.py      # PDF/image processing
 │   ├── servers/
 │   │   ├── database_server.py # SQLite MCP server
 │   │   └── calendar_server.py # Google Calendar MCP server
-│   └── requirements.txt
-├── Frontend/
-│   ├── src/app/
-│   │   ├── page.tsx           # Main chat (streaming)
-│   │   ├── chat/[id]/page.tsx # Conversation page
-│   │   ├── settings/page.tsx  # MCP server management
-│   │   └── components/
-│   │       └── common/SideBar.tsx
-│   └── package.json
-└── .gitignore
+│   └── examples/
+│       └── mosaic_template.py
+└── Frontend/
+    ├── .gitignore
+    ├── package.json
+    ├── src/app/
+    │   ├── page.tsx           # Main chat (streaming)
+    │   ├── chat/[id]/page.tsx # Conversation page
+    │   ├── settings/page.tsx  # MCP server management
+    │   └── components/
+    │       └── common/SideBar.tsx
+    └── ...
 ```
+
+---
+
+## Logging
+
+Mosaic has a centralized logging system that writes to rotating log files in `Backend/logs/`.
+
+| File | What it captures | Size limit |
+|------|-----------------|-----------|
+| `mosaic.log` | Everything (DEBUG+): agent routing, MCP connections, errors | 10MB × 5 |
+| `mosaic_errors.log` | Errors only — check this first when debugging | 5MB × 3 |
+| `requests.log` | Every HTTP request: method, path, status, duration, body | 10MB × 3 |
+
+**View logs from the API:**
+```bash
+# Recent 50 lines
+curl http://localhost:8080/logs?lines=50
+
+# Errors only
+curl http://localhost:8080/logs/errors
+
+# Filter by level
+curl http://localhost:8080/logs?level=WARNING
+```
+
+**Set log level** in `Backend/.env`:
+```env
+LOG_LEVEL=DEBUG  # DEBUG, INFO, WARNING, ERROR
+```
+
+**Console output** shows colored logs (green=info, yellow=warning, red=error) during development.
 
 ---
 

@@ -32,15 +32,10 @@ from utils.RAGTools import load_document, query_documents, list_documents, clear
 # Load environment variables from .env file
 load_dotenv()
 
-# Configure logging to file (INFO level by default)
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('mosaic.log'),
-    ]
-)
-logger = logging.getLogger(__name__)
+# Configure logging
+from utils.logger import setup_logging, get_logger
+setup_logging(level=os.getenv("LOG_LEVEL", "INFO"))
+logger = get_logger("client")
 
 # Suppress verbose HTTP logs from `httpx`
 logging.getLogger("httpx").setLevel(logging.WARNING)

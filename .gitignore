@@ -11,6 +11,7 @@ venv/
 
 # Logs
 *.log
+logs/
 
 # Old backup
 Mosaic-old/

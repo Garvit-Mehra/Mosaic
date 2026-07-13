@@ -49,6 +49,7 @@ servers/token.json
 # Log files
 *.log
 mosaic.log
+logs/
 
 # IDE and editor files
 .vscode/
