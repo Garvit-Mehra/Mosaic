@@ -1,109 +1,204 @@
-# Mosaic - Multi-Agent Client for MCP Servers
+# Mosaic - Multi-Agent AI Assistant
 
-A modern multi-agent client framework that connects to MCP (Model Context Protocol) servers using LangChain and locally running LLMs (via [Ollama](https://ollama.com)).
+A modular multi-agent system with a Next.js frontend and FastAPI backend, powered by local LLMs via [Ollama](https://ollama.com) and extensible through MCP (Model Context Protocol) servers.
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.3.0-orange.svg)](VERSION)
-[![LangChain](https://img.shields.io/badge/LangChain-0.1+-yellow.svg)](https://langchain.com)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org)
+[![License](https://img.shields.io/badge/License-Non--Commercial-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-2.0.0-orange.svg)](VERSION)
 [![MCP](https://img.shields.io/badge/MCP-1.0+-purple.svg)](https://modelcontextprotocol.io/)
 
 ---
 
 ## Overview
 
-**Mosaic** is a modular multi-agent client framework that intelligently routes user queries to specialized agents and MCP (Model Context Protocol) servers.  
+**Mosaic** is a full-stack AI assistant that routes queries to specialized agents — general chat, web search, document Q&A, and any MCP tool server you connect.
 
-It supports:  
-- Multi-agent orchestration  
-- Web search integration  
-- Retrieval-Augmented Generation (RAG)  
-- MCP server connectivity  
-- Extensible agent framework  
-- Local LLMs via Ollama (choose any available model, e.g., Llama 3, Mistral, Gemma, etc.)  
+- **Streaming responses** — tokens appear in real-time as the LLM generates them
+- **Conversation persistence** — chat history stored in SQLite, survives restarts
+- **Hot-reload MCP servers** — add/remove tool servers from the Settings UI without restarting
+- **Local-first** — runs entirely on your machine with Ollama, no API keys required (except Tavily for web search)
 
 ---
 
-## Key Features
+## Architecture
 
-- Multi-agent client with intelligent query routing  
-- Built-in web search and document analysis (RAG)  
-- Works with any model available through Ollama  
-- Easy extension with new agents and MCP servers  
+```
+┌─────────────────┐         ┌──────────────────────┐
+│  Next.js (3000) │◄───────►│  FastAPI (8080)      │
+│  Frontend       │  HTTP   │  Agent Orchestration │
+└─────────────────┘         └──────┬───────────────┘
+                                   │
+                    ┌──────────────┼──────────────┐
+                    ▼              ▼              ▼
+              ┌──────────┐  ┌──────────┐  ┌──────────┐
+              │ Ollama   │  │ DB Server│  │ Calendar │
+              │ (LLM)   │  │ (8000)   │  │ (8010)   │
+              └──────────┘  └──────────┘  └──────────┘
+                              MCP Servers (optional)
+```
 
 ---
 
-## Installation & Setup
+## Quick Start
 
 ### Prerequisites
-- Python 3.8+  
-- Ollama installed ([Download](https://ollama.com))  
-- Tavily API key (for web search)  
+- Python 3.10+
+- Node.js 18+
+- [Ollama](https://ollama.com) installed
+- Tavily API key (for web search agent)
 
-### Quick Start
+### 1. Setup Backend
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/garvit-mehra/mosaic.git
-   cd mosaic
-   ```
+```bash
+cd Backend
+python -m venv ../.venv
+source ../.venv/bin/activate
+pip install -r requirements.txt
+```
 
-2. **Create a virtual environment**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
-    ```
-3. **Install dependencies**
-    ```bash
-    pip install -r requirements.txt
-    ```
-4. **Download and run the required model via Ollama**
-    ```bash
-    ollama run [any model of your choice]
-    ```
-5. **Run Mosaic**
-    ```bash
-    cd examples
-    python mosaic_template.py
-    ```
+### 2. Configure Environment
+
+Create `Backend/.env`:
+```env
+TAVILY_API_KEY=your_tavily_key_here
+```
+
+Create `Frontend/.env`:
+```env
+NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8080
+```
+
+### 3. Pull an Ollama Model
+
+```bash
+ollama pull mistral
+```
+
+(Or use `llama3.2` for faster responses — change model in `cifastapi_mosaic.py`)
+
+### 4. Run
+
+```bash
+# Terminal 1: Ollama (if not already running as a service)
+ollama serve
+
+# Terminal 2: Backend
+cd Backend
+source ../.venv/bin/activate
+uvicorn cifastapi_mosaic:app --reload --port 8080
+
+# Terminal 3: Frontend
+cd Frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:3000** — start chatting.
+
+### 5. (Optional) MCP Servers
+
+```bash
+# Terminal 4: Database tools
+cd Backend
+python servers/database_server.py
+
+# Terminal 5: Google Calendar tools
+python servers/calendar_server.py
+```
+
+Then go to **Settings** in the UI and click **Refresh All**, or add new servers via the form.
 
 ---
 
-## Configuration
+## Features
 
-**Model configuration**
+### Agents
+| Agent | Description | Always Available |
+|-------|-------------|:---:|
+| General | Writing, coding, math, explanations, creative tasks | ✅ |
+| Web | Real-time info via Tavily (news, weather, scores) | ✅ |
+| RAG | Query loaded PDFs and documents | ✅ |
+| Database | SQLite CRUD via MCP server | Optional |
+| Calendar | Google Calendar via MCP server | Optional |
+| Custom | Any MCP server you add | Optional |
 
-To change the model you are using, update ```model_config``` within ```mosaic_template.py```
+### API Endpoints
 
-**MCP Server Example**
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/chat` | Send message, get response |
+| `POST` | `/chat/stream` | Streaming response (SSE) |
+| `GET` | `/conversations` | List all conversations |
+| `GET` | `/conversations/:id` | Get conversation messages |
+| `DELETE` | `/conversations/:id` | Delete conversation |
+| `GET` | `/servers` | List MCP servers + status |
+| `POST` | `/servers` | Add new MCP server |
+| `DELETE` | `/servers/:name` | Remove MCP server |
+| `POST` | `/servers/refresh` | Hot-reload all servers |
+| `GET` | `/servers/:name/tools` | List tools for a server |
+
+---
+
+## Adding MCP Servers
+
+### Via UI
+Go to **Settings** → **Add MCP Server** → enter name, URL, description → click Add.
+
+### Via API
+```bash
+curl -X POST http://localhost:8080/servers \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my_server", "url": "http://localhost:9000/sse", "description": "Does cool stuff"}'
+```
+
+### Via Config
+Edit `SERVER_CONFIGS` in `cifastapi_mosaic.py`:
 ```python
-{
-    "name": "your_server_name",
-    "description": "Description of what your server does.",
-    "url": "http://localhost:PORT/sse",
-    "transport": "sse"
-}
+SERVER_CONFIGS = [
+    {"name": "my_server", "description": "...", "url": "http://localhost:9000/sse"},
+]
+```
+
+---
+
+## Project Structure
+
+```
+Mosaic/
+├── Backend/
+│   ├── cifastapi_mosaic.py    # FastAPI app (endpoints)
+│   ├── client.py              # Mosaic agent orchestration
+│   ├── utils/
+│   │   ├── ConversationDB.py  # SQLite conversation storage
+│   │   ├── RAGTools.py        # Document Q&A tools
+│   │   └── ProcessPDF.py      # PDF/image processing
+│   ├── servers/
+│   │   ├── database_server.py # SQLite MCP server
+│   │   └── calendar_server.py # Google Calendar MCP server
+│   └── requirements.txt
+├── Frontend/
+│   ├── src/app/
+│   │   ├── page.tsx           # Main chat (streaming)
+│   │   ├── chat/[id]/page.tsx # Conversation page
+│   │   ├── settings/page.tsx  # MCP server management
+│   │   └── components/
+│   │       └── common/SideBar.tsx
+│   └── package.json
+└── .gitignore
 ```
 
 ---
 
 ## License
 
-This project is distributed under a **Non-Commercial, No-Distribution License (Based on MIT)**.
-
-- **No Commercial Use**: The Software may not be used, in whole or in part, for any commercial purpose.  
-- **No Distribution**: Redistribution, sublicensing, or selling of the Software, in original or modified form, is prohibited.  
-- **No Hosting as a Service**: The Software may not be offered as part of a hosted or managed service, whether free or paid.  
-
-The full license text can be found in the [LICENSE](LICENSE) file.
+Non-Commercial, No-Distribution License (Based on MIT). See [LICENSE](LICENSE).
 
 ---
 
 ## Acknowledgments
-- LangChain for the AI framework
-- MCP for the server protocol
-- Tavily for web search integration
-- Ollama for local LLM deployment
-- Community contributors
-
----
+- [LangChain](https://langchain.com) / [LangGraph](https://langchain-ai.github.io/langgraph/) for agent orchestration
+- [Ollama](https://ollama.com) for local LLM inference
+- [MCP](https://modelcontextprotocol.io/) for the tool server protocol
+- [Tavily](https://tavily.com) for web search
+- [Next.js](https://nextjs.org) for the frontend framework

@@ -1,0 +1,16 @@
+# Virtual environments
+.venv/
+venv/
+
+# OS files
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Old backup
+Mosaic-old/

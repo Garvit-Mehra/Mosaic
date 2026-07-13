@@ -2,27 +2,41 @@
 
 All notable changes to the Mosaic project will be documented in this file.
 
-## [1.3.1] - 2025-08-16
-
-### Changed
-- **Model Config**: Now any open source model can be used to run Mosiac, via Ollama
-
----
-
-## [1.3.0] - 2025-08-16
-
-### Changed
-- **Authors**: Updated project authorship to *Mosaic Team* instead of a single contributor
-- **License**: Project license updated from MIT to new team license
-- **Client**: Major cleanup and refactor of `client.py` for improved modularity and maintainability
-- **Client**: Enhanced logging, error handling, and async request support
-- **Client**: Improved prompt handling to reduce token usage and running costs
-- **README.md**: Updated with new authorship, license, and minimum system requirements for Ollama/Mistral
+## [2.0.0] - 2025-07-13
 
 ### Added
-- **Client**: Support for smaller, optimized prompts for efficiency
-- **Client**: Better markdown-style output formatting for consistency
-- **Documentation**: Clearer contribution guidelines reflecting team-based development
+- **Full-Stack Application**: Next.js 15 frontend with real-time streaming chat UI
+- **Streaming Responses**: Token-by-token SSE streaming from backend to frontend
+- **Conversation Persistence**: SQLite-backed conversation history via SQLAlchemy
+- **Settings UI**: Add/remove/monitor MCP servers from the browser (`/settings`)
+- **Hot-Reload MCP Servers**: `POST /servers/refresh` picks up newly started servers without restart
+- **Dynamic Server Management**: Add MCP servers at runtime via API or UI
+- **Server Tools Viewer**: See all tools a connected MCP server provides
+- **Conversation CRUD**: Full REST API for conversations (create, list, get, update, delete)
+- **Auto-Conversation Creation**: First message auto-creates a conversation if none specified
+- **Collapsible Sidebar**: Shows real conversations from the database with delete support
+
+### Changed
+- **Switched to Ollama**: Removed OpenAI dependency — all inference runs locally via Ollama
+- **Improved Agent Routing**: Tighter classification prompt so general queries don't misroute to RAG
+- **Fixed FastAPI Lifespan**: App now properly initializes on startup via `lifespan`
+- **Updated LangChain Imports**: Fixed deprecated `langchain.text_splitter` and `langchain.schema` paths
+- **Agent Descriptions**: Made descriptions explicit to prevent routing confusion
+- **MCP Servers Optional**: Backend starts fine with zero MCP servers running
+
+### Removed
+- **Dead Code**: Removed `utils/Clients.py` (300+ lines of unused OpenAI/Autogen clients)
+- **Broken Streaming Endpoint**: Removed old `/chat/stream` that referenced non-existent methods
+- **Auth Dependency**: Removed NextAuth/Prisma from frontend (simplifies setup)
+- **Hardcoded Sidebar**: Replaced static chat list with live data from backend
+
+### Fixed
+- **Message Model**: `ChatRequest` now correctly includes `conversation_id` and `user_id`
+- **Session Management**: ConversationDB uses proper context manager with commit/rollback
+- **Import Chain**: Fixed `langchain.text_splitter` → `langchain_text_splitters`
+- **Import Chain**: Fixed `langchain.schema.Document` → `langchain_core.documents.Document`
+- **CSS Variables**: Added missing `--foreground`, `--background`, `--input-bg` definitions
+- **Frontend .env**: Fixed backend URL pointing to wrong port (was 8000, now 8080)
 
 ---
 
@@ -33,7 +47,7 @@ All notable changes to the Mosaic project will be documented in this file.
 - **New Model**: Updated code to use the GPT-5 model released by OpenAI
 
 ### Fixed
-- **Tavily**: Fixed Tavily-Langchain depriciation error warning, to use new integrated library
+- **Tavily**: Fixed Tavily-Langchain depreciation error warning, to use new integrated library
 
 ---
 
@@ -44,23 +58,12 @@ All notable changes to the Mosaic project will be documented in this file.
 - **Built-in Capabilities**: Web search, RAG, and general conversation agents
 - **MCP Server Integration**: Connect to any MCP-compatible server
 - **Configuration Templates**: Ready-to-use server configuration templates
-- **Comprehensive Documentation**: Complete README.md with detailed setup instructions and examples
 - **Example MCP Servers**: Database and calendar servers as add-ons
-- **Enhanced Error Handling**: Better user feedback and troubleshooting information
-- **Professional Project Structure**: Clean organization for GitHub distribution
 
 ### Changed
-- **Enhanced README.md**: Comprehensive documentation with clear sections, and step-by-step guides
-- **Improved requirements.txt**: Better organization with categorized dependencies and system requirements
-- **Better Code Documentation**: Enhanced comments and docstrings throughout the codebase
-- **Simplified Configuration**: Streamlined server configuration and setup process
-- **User Experience**: More intuitive usage with direct client.py and template options
-- **Architecture Focus**: Positioned as MCP client framework rather than toolkit
-
-### Fixed
-- **Documentation Issues**: Clearer setup instructions and troubleshooting guides
-- **Configuration Clarity**: Better examples and templates for server setup
-- **Installation Process**: Simplified dependency management and environment setup
+- **Enhanced README.md**: Comprehensive documentation
+- **Improved requirements.txt**: Categorized dependencies
+- **Architecture Focus**: Positioned as MCP client framework
 
 ---
 
@@ -69,73 +72,8 @@ All notable changes to the Mosaic project will be documented in this file.
 ### Added
 - Initial release of Mosaic multi-agent client framework
 - Modular multi-agent architecture with intelligent query routing
-- Built-in web search agent using Tavily API for real-time information
-- Built-in RAG agent for document analysis and processing
-- Built-in general conversation agent for context-aware responses
-- MCP (Model Context Protocol) server integration
 - PDF and image processing capabilities
 - Vector search using FAISS
-- Conversation history management
-- Configurable server architecture
+- Conversation history management (in-memory)
 - Support for custom MCP servers
-- Example database server as add-on
-
-### Features
-- **Multi-Agent Client Framework**: Intelligent routing of queries to specialized agents and MCP servers
-- **Built-in Capabilities**: Web search, RAG, and general conversation
-- **MCP Server Integration**: Connect to any MCP-compatible server
-- **OpenAI + LangChain**: Leverage GPT models with custom tools
-- **Conversation Management**: Context-aware conversations across agents
-- **Modular Design**: Easy to extend with custom agents and MCP servers
-- **Configuration Flexibility**: Customizable server configurations and settings
-
-### Technical Details
-- Built with LangChain and LangGraph for AI orchestration
-- Uses OpenAI GPT models for natural language processing
-- Implements MCP for server communication
-- Supports async/await patterns for better performance
-- Includes comprehensive logging and error handling
-- Modular codebase for easy customization and extension
-
-### Dependencies
-- Python 3.8+
-- LangChain ecosystem
-- OpenAI API
-- Tavily API
-- FAISS for vector search
-- Various document processing libraries
-
----
-
-## Version History Summary
-
-### Version 1.1.0 (Current) - 2025-06-27
-- **Multi-Agent Client Framework**: Core framework for MCP server integration
-- **Built-in Capabilities**: Web search, RAG, and general conversation
-- **Example Servers**: Database and calendar servers as add-ons
-- **Professional Setup**: Clean project structure ready for GitHub
-
-### Version 1.0.0 - 2025-06-23
-- **Initial Release**: Multi-agent client framework with built-in capabilities
-- **Core Features**: Modular architecture, intelligent routing, conversation management
-- **Integration**: MCP servers, OpenAI GPT models, Tavily web search
-- **Add-ons**: Example database server for demonstration
-
----
-
-## Contributing
-
-When contributing to this project, please update this changelog with your changes following the format above.
-
-## Release Process
-
-1. Update version numbers in relevant files
-2. Update this CHANGELOG.md with new version
-3. Create a git tag for the release
-4. Update README.md if needed
-5. Test the release thoroughly
-6. Publish to GitHub
-
----
-
-*For more information about releases, see the [GitHub releases page](https://github.com/garvit-mehra/mosaic/releases).* 
+- Example database server
