@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Wrench,
 } from "lucide-react";
+import { authFetch } from "@/src/lib/auth";
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -46,7 +47,7 @@ export default function SettingsPage() {
 
   const fetchServers = async () => {
     try {
-      const res = await fetch(`${BACKEND}/servers`);
+      const res = await authFetch(`${BACKEND}/servers`);
       if (res.ok) {
         const data = await res.json();
         setServers(data.servers);
@@ -65,7 +66,7 @@ export default function SettingsPage() {
   const refreshServers = async () => {
     setRefreshing(true);
     try {
-      await fetch(`${BACKEND}/servers/refresh`, { method: "POST" });
+      await authFetch(`${BACKEND}/servers/refresh`, { method: "POST" });
       await fetchServers();
       setFeedback({ type: "success", message: "Servers refreshed." });
     } catch {
@@ -80,9 +81,8 @@ export default function SettingsPage() {
     if (!newName.trim() || !newUrl.trim()) return;
     setAddingServer(true);
     try {
-      const res = await fetch(`${BACKEND}/servers`, {
+      const res = await authFetch(`${BACKEND}/servers`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newName.trim().toLowerCase().replace(/\s+/g, "_"),
           description: newDescription.trim() || `MCP server at ${newUrl.trim()}`,
@@ -110,7 +110,7 @@ export default function SettingsPage() {
 
   const removeServer = async (name: string) => {
     try {
-      const res = await fetch(`${BACKEND}/servers/${name}`, { method: "DELETE" });
+      const res = await authFetch(`${BACKEND}/servers/${name}`, { method: "DELETE" });
       if (res.ok) {
         setServers((prev) => prev.filter((s) => s.name !== name));
         setFeedback({ type: "success", message: `Server '${name}' removed.` });
@@ -123,14 +123,13 @@ export default function SettingsPage() {
 
   const fetchTools = async (serverName: string) => {
     if (tools[serverName]) {
-      // Already loaded, just toggle
       setExpandedServer(expandedServer === serverName ? null : serverName);
       return;
     }
     setLoadingTools(serverName);
     setExpandedServer(serverName);
     try {
-      const res = await fetch(`${BACKEND}/servers/${serverName}/tools`);
+      const res = await authFetch(`${BACKEND}/servers/${serverName}/tools`);
       if (res.ok) {
         const data = await res.json();
         setTools((prev) => ({ ...prev, [serverName]: data.tools }));

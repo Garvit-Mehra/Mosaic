@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Roboto } from "next/font/google";
-import SideBar from "./components/common/SideBar";
+import { SessionProvider } from "next-auth/react";
+import SideBarWrapper from "./components/common/SideBarWrapper";
 
 const roboto = Roboto({
   weight: ["400", "500"],
@@ -21,8 +22,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={roboto.className}>
       <body className="flex relative h-screen overflow-hidden">
-        <SideBar />
-        <main className="flex-1 h-screen overflow-hidden">{children}</main>
+        <SessionProvider>
+          <SideBarWrapper />
+          <main className="flex-1 h-screen overflow-hidden">{children}</main>
+        </SessionProvider>
       </body>
     </html>
   );

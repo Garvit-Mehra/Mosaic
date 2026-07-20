@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { ArrowUp, Loader2 } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { authFetch } from "@/src/lib/auth";
 
 interface Message {
   id: number;
@@ -19,6 +21,7 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { data: session } = useSession();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -53,14 +56,23 @@ export default function ChatPage() {
     ]);
 
     try {
+      const backendToken = (session as any)?.backendToken;
       const res = await fetch(`${BACKEND}/chat/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(backendToken ? { "Authorization": `Bearer ${backendToken}` } : {}),
+        },
         body: JSON.stringify({
           message: userMessage.content,
           conversation_id: conversationId,
         }),
       });
+
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
 
       if (!res.body) throw new Error("No response body");
 

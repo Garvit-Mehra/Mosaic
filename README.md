@@ -5,7 +5,7 @@ A modular multi-agent system with a Next.js frontend and FastAPI backend, powere
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org)
 [![License](https://img.shields.io/badge/License-Non--Commercial-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.0.0-orange.svg)](VERSION)
+[![Version](https://img.shields.io/badge/Version-2.1.0-orange.svg)](VERSION)
 [![MCP](https://img.shields.io/badge/MCP-1.0+-purple.svg)](https://modelcontextprotocol.io/)
 
 ---
@@ -15,9 +15,11 @@ A modular multi-agent system with a Next.js frontend and FastAPI backend, powere
 **Mosaic** is a full-stack AI assistant that routes queries to specialized agents — general chat, web search, document Q&A, and any MCP tool server you connect.
 
 - **Streaming responses** — tokens appear in real-time as the LLM generates them
+- **Full authentication** — NextAuth with Google, GitHub, Microsoft OAuth + credentials
 - **Conversation persistence** — chat history stored in SQLite, survives restarts
 - **Hot-reload MCP servers** — add/remove tool servers from the Settings UI without restarting
-- **Local-first** — runs entirely on your machine with Ollama, no API keys required (except Tavily for web search)
+- **Admin panel** — system diagnostics, log viewer, config inspector, danger zone
+- **Local-first** — runs entirely on your machine with Ollama
 
 ---
 
@@ -26,7 +28,8 @@ A modular multi-agent system with a Next.js frontend and FastAPI backend, powere
 ```
 ┌─────────────────┐         ┌──────────────────────┐
 │  Next.js (3000) │◄───────►│  FastAPI (8080)      │
-│  Frontend       │  HTTP   │  Agent Orchestration │
+│  + NextAuth     │  HTTP   │  Agent Orchestration │
+│  + Middleware   │         │  + JWT Validation    │
 └─────────────────┘         └──────┬───────────────┘
                                    │
                     ┌──────────────┼──────────────┐
@@ -54,20 +57,31 @@ A modular multi-agent system with a Next.js frontend and FastAPI backend, powere
 cd Backend
 python -m venv ../.venv
 source ../.venv/bin/activate
-pip install -r requirements.txt
+pip install -r ../requirements.txt
 ```
 
 ### 2. Configure Environment
 
-Create `Backend/.env`:
-```env
-TAVILY_API_KEY=your_tavily_key_here
-LOG_LEVEL=INFO   # DEBUG, INFO, WARNING, or ERROR
+Copy and fill in the example files:
+
+```bash
+cp Backend/.env.example Backend/.env
+cp Frontend/.env.example Frontend/.env
 ```
 
-Create `Frontend/.env`:
+**Backend `.env`** — set your passwords and keys:
 ```env
-NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8080
+TAVILY_API_KEY=your_tavily_key
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your_strong_password
+USER_USERNAME=user
+USER_PASSWORD=your_strong_password
+JWT_SECRET=generate_with_python_secrets_token_hex_32
+```
+
+**Frontend `.env`** — set the auth secret:
+```env
+AUTH_SECRET=generate_with_openssl_rand_base64_32
 ```
 
 ### 3. Pull an Ollama Model
@@ -76,39 +90,65 @@ NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8080
 ollama pull mistral
 ```
 
-(Or use `llama3.2` for faster responses — change model in `cifastapi_mosaic.py`)
-
 ### 4. Run
 
 ```bash
-# Terminal 1: Ollama (if not already running as a service)
+# Terminal 1: Ollama
 ollama serve
 
 # Terminal 2: Backend
-cd Backend
-source ../.venv/bin/activate
+cd Backend && source ../.venv/bin/activate
 uvicorn cifastapi_mosaic:app --reload --port 8080
 
 # Terminal 3: Frontend
-cd Frontend
-npm install
-npm run dev
+cd Frontend && npm install && npm run dev
 ```
 
-Open **http://localhost:3000** — start chatting.
+Open **http://localhost:3000** — log in and start chatting.
 
-### 5. (Optional) MCP Servers
+---
 
-```bash
-# Terminal 4: Database tools
-cd Backend
-python servers/database_server.py
+## Authentication
 
-# Terminal 5: Google Calendar tools
-python servers/calendar_server.py
+Mosaic uses [NextAuth v5](https://authjs.dev/) for authentication with multiple providers:
+
+| Provider | Setup |
+|----------|-------|
+| Credentials | Set `ADMIN_PASSWORD` and `USER_PASSWORD` in backend `.env` |
+| Google | Add `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` to frontend `.env` |
+| GitHub | Add `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` to frontend `.env` |
+| Microsoft | Add `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` to frontend `.env` |
+
+Providers without configured client IDs are automatically hidden from the login page. Enable any combination.
+
+### OAuth Redirect URIs
+
+Register these in your provider's developer console:
+```
+http://localhost:3000/api/auth/callback/google
+http://localhost:3000/api/auth/callback/github
+http://localhost:3000/api/auth/callback/microsoft-entra-id
 ```
 
-Then go to **Settings** in the UI and click **Refresh All**, or add new servers via the form.
+### Roles
+
+- **Admin** — full access: server management, logs, all conversations, system config
+- **User** — chat, manage own conversations, add/remove MCP servers
+
+Admin role is assigned via:
+- Credentials: the `ADMIN_USERNAME` account
+- OAuth: emails listed in `ADMIN_EMAILS` env var
+
+### Security
+
+| Protection | How |
+|-----------|-----|
+| Session tokens | httpOnly signed cookies — invisible to JavaScript (XSS-safe) |
+| CSRF | Built into NextAuth |
+| Passwords | bcrypt with salt (timing-safe) |
+| Brute force | Rate limiter: 5 login attempts per 5 minutes per IP |
+| Route protection | Next.js middleware blocks unauthenticated/unauthorized access |
+| Open-source safe | All secrets in `.env` (gitignored), zero hardcoded values |
 
 ---
 
@@ -126,42 +166,55 @@ Then go to **Settings** in the UI and click **Refresh All**, or add new servers 
 
 ### API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/chat` | Send message, get response |
-| `POST` | `/chat/stream` | Streaming response (SSE) |
-| `GET` | `/conversations` | List all conversations |
-| `GET` | `/conversations/:id` | Get conversation messages |
-| `DELETE` | `/conversations/:id` | Delete conversation |
-| `GET` | `/servers` | List MCP servers + status |
-| `POST` | `/servers` | Add new MCP server |
-| `DELETE` | `/servers/:name` | Remove MCP server |
-| `POST` | `/servers/refresh` | Hot-reload all servers |
-| `GET` | `/servers/:name/tools` | List tools for a server |
-| `GET` | `/logs?lines=100&level=ERROR` | View recent logs |
-| `GET` | `/logs/errors` | View error-only logs |
-| `GET` | `/status` | Active agents and server status |
+| Method | Path | Access | Description |
+|--------|------|--------|-------------|
+| `POST` | `/auth/login` | Public | Credentials login |
+| `POST` | `/auth/oauth` | Internal | Backend token for OAuth users |
+| `POST` | `/auth/refresh` | Public | Refresh access token |
+| `GET` | `/auth/me` | Any user | Current user info |
+| `GET` | `/health` | Public | Health check |
+| `POST` | `/chat` | Any user | Send message |
+| `POST` | `/chat/stream` | Any user | Streaming response (SSE) |
+| `GET/POST/DELETE` | `/conversations` | Any user | CRUD (own only for users) |
+| `GET/POST/DELETE` | `/servers` | Any user | MCP server management |
+| `POST` | `/servers/refresh` | Any user | Hot-reload servers |
+| `GET` | `/admin/status` | Admin | System diagnostics |
+| `GET` | `/admin/config` | Admin | Runtime config viewer |
+| `GET` | `/admin/logs` | Admin | Application logs |
+| `GET` | `/admin/logs/errors` | Admin | Error logs |
+| `GET` | `/admin/logs/requests` | Admin | HTTP request logs |
+| `DELETE` | `/admin/conversations/clear` | Admin | Wipe all conversations |
+
+---
+
+## Logging
+
+Rotating log files in `Backend/logs/` (auto-created, gitignored):
+
+| File | Contents | Rotation |
+|------|----------|----------|
+| `mosaic.log` | Full debug trace | 10MB × 5 backups |
+| `mosaic_errors.log` | Errors only | 5MB × 3 backups |
+| `requests.log` | Every HTTP request with timing | 10MB × 3 backups |
+
+View logs from the admin panel or API:
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/admin/logs?lines=50
+```
 
 ---
 
 ## Adding MCP Servers
 
 ### Via UI
-Go to **Settings** → **Add MCP Server** → enter name, URL, description → click Add.
+Go to **Servers** in the sidebar → **Add MCP Server** → enter name, URL, description.
 
 ### Via API
 ```bash
 curl -X POST http://localhost:8080/servers \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name": "my_server", "url": "http://localhost:9000/sse", "description": "Does cool stuff"}'
-```
-
-### Via Config
-Edit `SERVER_CONFIGS` in `cifastapi_mosaic.py`:
-```python
-SERVER_CONFIGS = [
-    {"name": "my_server", "description": "...", "url": "http://localhost:9000/sse"},
-]
 ```
 
 ---
@@ -176,65 +229,33 @@ Mosaic/
 ├── requirements.txt
 ├── .gitignore
 ├── Backend/
-│   ├── .gitignore
-│   ├── cifastapi_mosaic.py    # FastAPI app (endpoints + middleware)
-│   ├── client.py              # Mosaic agent orchestration
-│   ├── logs/                  # Auto-created log files (gitignored)
-│   │   ├── mosaic.log         # Full debug log (rotating, 10MB)
-│   │   ├── mosaic_errors.log  # Errors only (rotating, 5MB)
-│   │   └── requests.log       # HTTP request log (rotating, 10MB)
+│   ├── .env.example
+│   ├── cifastapi_mosaic.py       # FastAPI app + middleware
+│   ├── client.py                 # Agent orchestration
 │   ├── utils/
-│   │   ├── logger.py          # Centralized logging configuration
-│   │   ├── ConversationDB.py  # SQLite conversation storage
-│   │   ├── RAGTools.py        # Document Q&A tools
-│   │   └── ProcessPDF.py      # PDF/image processing
-│   ├── servers/
-│   │   ├── database_server.py # SQLite MCP server
-│   │   └── calendar_server.py # Google Calendar MCP server
-│   └── examples/
-│       └── mosaic_template.py
+│   │   ├── auth.py               # JWT + bcrypt + rate limiting
+│   │   ├── logger.py             # Centralized logging
+│   │   ├── ConversationDB.py     # SQLite persistence
+│   │   ├── RAGTools.py           # Document Q&A
+│   │   └── ProcessPDF.py         # PDF/image processing
+│   └── servers/
+│       ├── database_server.py    # SQLite MCP server
+│       └── calendar_server.py    # Google Calendar MCP server
 └── Frontend/
-    ├── .gitignore
+    ├── .env.example
     ├── package.json
-    ├── src/app/
-    │   ├── page.tsx           # Main chat (streaming)
-    │   ├── chat/[id]/page.tsx # Conversation page
-    │   ├── settings/page.tsx  # MCP server management
-    │   └── components/
-    │       └── common/SideBar.tsx
+    ├── middleware.ts              # Route protection
+    ├── src/
+    │   ├── auth.ts               # NextAuth v5 config
+    │   ├── lib/auth.ts           # authFetch helper
+    │   └── app/
+    │       ├── page.tsx          # Chat (streaming)
+    │       ├── login/page.tsx    # Login (OAuth + credentials)
+    │       ├── settings/page.tsx # MCP server management
+    │       ├── admin/page.tsx    # Admin panel
+    │       └── chat/[id]/page.tsx
     └── ...
 ```
-
----
-
-## Logging
-
-Mosaic has a centralized logging system that writes to rotating log files in `Backend/logs/`.
-
-| File | What it captures | Size limit |
-|------|-----------------|-----------|
-| `mosaic.log` | Everything (DEBUG+): agent routing, MCP connections, errors | 10MB × 5 |
-| `mosaic_errors.log` | Errors only — check this first when debugging | 5MB × 3 |
-| `requests.log` | Every HTTP request: method, path, status, duration, body | 10MB × 3 |
-
-**View logs from the API:**
-```bash
-# Recent 50 lines
-curl http://localhost:8080/logs?lines=50
-
-# Errors only
-curl http://localhost:8080/logs/errors
-
-# Filter by level
-curl http://localhost:8080/logs?level=WARNING
-```
-
-**Set log level** in `Backend/.env`:
-```env
-LOG_LEVEL=DEBUG  # DEBUG, INFO, WARNING, ERROR
-```
-
-**Console output** shows colored logs (green=info, yellow=warning, red=error) during development.
 
 ---
 
@@ -245,6 +266,7 @@ Non-Commercial, No-Distribution License (Based on MIT). See [LICENSE](LICENSE).
 ---
 
 ## Acknowledgments
+- [Auth.js / NextAuth](https://authjs.dev/) for authentication
 - [LangChain](https://langchain.com) / [LangGraph](https://langchain-ai.github.io/langgraph/) for agent orchestration
 - [Ollama](https://ollama.com) for local LLM inference
 - [MCP](https://modelcontextprotocol.io/) for the tool server protocol

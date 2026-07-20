@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from client import MosaicAPI
 from pydantic import BaseModel
 from typing import Optional, List
@@ -7,13 +7,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from utils.ConversationDB import ConversationManager
 from utils.logger import get_logger, get_request_logger
+from utils.auth import (
+    LoginRequest, TokenUser, TokenResponse,
+    get_current_user, require_admin,
+    authenticate_user, create_access_token, create_refresh_token,
+    verify_token, rate_limiter,
+)
 import json
 import time
+import os
 
 logger = get_logger("api")
 request_logger = get_request_logger()
 
-# --- Server configuration (all MCP servers are optional) ---
+# --- Configuration from environment ---
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+
 SERVER_CONFIGS = [
     {
         "name": "database_server",
@@ -27,11 +36,11 @@ SERVER_CONFIGS = [
     },
 ]
 
-mosaic_api = MosaicAPI(SERVER_CONFIGS, web_search=True, model_config="llama3.2")
+mosaic_api = MosaicAPI(SERVER_CONFIGS, web_search=True, model_config=os.getenv("MODEL_NAME", "llama3.2"))
 conversation_db = ConversationManager()
 
 
-# --- Lifespan (runs on startup/shutdown) ---
+# --- Lifespan ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🚀 Mosaic backend starting up...")
@@ -47,11 +56,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# Allow all origins for dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,  # credentials not needed (we use Bearer tokens in headers)
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -60,92 +68,178 @@ app.add_middleware(
 # --- Request logging middleware ---
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    # Skip logging for OPTIONS preflight requests
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     start_time = time.time()
-    
-    # Log the incoming request
+
     body = None
     if request.method in ("POST", "PUT", "PATCH"):
         try:
             body_bytes = await request.body()
-            body = body_bytes.decode("utf-8")[:500]  # Truncate large bodies
+            body = body_bytes.decode("utf-8")[:500]
         except Exception:
             body = "<unreadable>"
 
     response = await call_next(request)
-    
+
     duration_ms = (time.time() - start_time) * 1000
-    
-    # Log entry
-    log_line = (
-        f"{request.method} {request.url.path} → {response.status_code} "
-        f"({duration_ms:.0f}ms)"
-    )
-    
+
+    log_line = f"{request.method} {request.url.path} → {response.status_code} ({duration_ms:.0f}ms)"
+
     if response.status_code >= 500:
         logger.error(log_line)
     elif response.status_code >= 400:
         logger.warning(log_line)
-    
-    # Always write to request log file
+
     request_logger.info(
         f"{request.method} {request.url.path} | "
         f"status={response.status_code} | "
         f"duration={duration_ms:.0f}ms | "
         f"body={body if body else '-'}"
     )
-    
+
     return response
 
 
-# --- Request/Response Models ---
+# =============================================================================
+# PUBLIC ENDPOINTS (no auth required)
+# =============================================================================
+
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[int] = None
-    user_id: Optional[str] = None
 
 
 class ConversationCreateRequest(BaseModel):
     title: str
-    user_id: Optional[str] = None
 
 
 class ConversationUpdateRequest(BaseModel):
     title: str
 
 
-# --- Chat Endpoint ---
+# --- Auth ---
+@app.post("/auth/login")
+async def login(req: LoginRequest, request: Request):
+    """
+    Authenticate with username/password. Returns access + refresh tokens.
+    Rate limited: 5 attempts per 5 minutes per IP.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+
+    # Rate limiting
+    if not rate_limiter.check(client_ip):
+        logger.warning(f"Rate limited login from IP: {client_ip}")
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again later.",
+            headers={"Retry-After": "300"},
+        )
+
+    user = authenticate_user(req.username, req.password)
+    if not user:
+        remaining = rate_limiter.remaining(client_ip)
+        logger.warning(f"Failed login: username={req.username} ip={client_ip} remaining={remaining}")
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+    access_token = create_access_token(user["username"], user["role"])
+    refresh_token = create_refresh_token(user["username"], user["role"])
+
+    logger.info(f"Login success: {user['username']} (role={user['role']}) ip={client_ip}")
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": 24 * 3600,
+        "username": user["username"],
+        "role": user["role"],
+    }
+
+
+@app.post("/auth/refresh")
+async def refresh_token_endpoint(request: Request):
+    """
+    Get a new access token using a valid refresh token.
+    Send refresh token in Authorization header.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Refresh token required.")
+
+    token = auth_header[7:]
+    user = verify_token(token, expected_type="refresh")
+
+    new_access = create_access_token(user.username, user.role)
+    return {
+        "access_token": new_access,
+        "token_type": "bearer",
+        "expires_in": 24 * 3600,
+    }
+
+
+@app.get("/auth/me")
+async def get_me(user: TokenUser = Depends(get_current_user)):
+    """Get the current authenticated user's info."""
+    return {"username": user.username, "role": user.role}
+
+
+@app.get("/health")
+async def health():
+    """Health check — no auth required. Use for uptime monitoring."""
+    return {"status": "ok", "timestamp": int(time.time())}
+
+
+class OAuthRequest(BaseModel):
+    email: str
+    name: Optional[str] = None
+    provider: str
+    role: str = "user"
+
+
+@app.post("/auth/oauth")
+async def oauth_login(req: OAuthRequest):
+    """
+    Called by the NextAuth callback to get a backend access token for OAuth users.
+    This endpoint is called server-side from Next.js, not from the browser.
+    """
+    # Create a backend token for the OAuth user
+    # The role is determined by the NextAuth callback based on ADMIN_EMAILS
+    access_token = create_access_token(req.email, req.role)
+    logger.info(f"OAuth login: {req.email} via {req.provider} (role={req.role})")
+    return {"access_token": access_token}
+
+
+# =============================================================================
+# USER ENDPOINTS (any authenticated user)
+# =============================================================================
+
+# --- Chat ---
 @app.post("/chat")
-async def chat(req: ChatRequest):
-    """
-    Send a message and get a response.
-    If conversation_id is provided, messages are persisted to that conversation.
-    If not, a new conversation is auto-created from the first message.
-    """
+async def chat(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
+    """Send a message and get a response."""
     conv_id = req.conversation_id
 
-    # Auto-create conversation if none provided
     if conv_id is None:
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
-        convo = conversation_db.create_conversation(title=title, user_id=req.user_id)
+        convo = conversation_db.create_conversation(title=title, user_id=user.username)
         conv_id = convo.id
-        logger.info(f"Created new conversation id={conv_id} title='{title}'")
+        logger.info(f"Created conversation id={conv_id} for user={user.username}")
 
-    logger.info(f"Chat request: conv={conv_id} message='{req.message[:80]}...' user={req.user_id}")
+    logger.info(f"Chat: user={user.username} conv={conv_id} msg='{req.message[:60]}'")
 
-    # Get AI response
     result = await mosaic_api.chat(
         req.message,
         conversation_id=conv_id,
-        user_id=req.user_id,
+        user_id=user.username,
     )
 
-    logger.info(f"Chat response: conv={conv_id} agent={result.get('agent')} length={len(result['response'])}")
+    logger.info(f"Response: conv={conv_id} agent={result.get('agent')} len={len(result['response'])}")
 
-    # Persist both messages
     conversation_db.add_message(conv_id, "user", req.message)
-    conversation_db.add_message(
-        conv_id, "assistant", result["response"], agent=result.get("agent")
-    )
+    conversation_db.add_message(conv_id, "assistant", result["response"], agent=result.get("agent"))
 
     return {
         "response": result["response"],
@@ -154,22 +248,17 @@ async def chat(req: ChatRequest):
     }
 
 
-# --- Streaming Chat Endpoint ---
 @app.post("/chat/stream")
-async def chat_stream(req: ChatRequest):
-    """
-    Stream a response via Server-Sent Events.
-    """
+async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
+    """Stream a response via Server-Sent Events."""
     conv_id = req.conversation_id
 
-    # Auto-create conversation if none provided
     if conv_id is None:
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
-        convo = conversation_db.create_conversation(title=title, user_id=req.user_id)
+        convo = conversation_db.create_conversation(title=title, user_id=user.username)
         conv_id = convo.id
-        logger.info(f"[stream] Created new conversation id={conv_id}")
 
-    logger.info(f"[stream] Chat request: conv={conv_id} message='{req.message[:80]}'")
+    logger.info(f"[stream] user={user.username} conv={conv_id} msg='{req.message[:60]}'")
 
     async def event_generator():
         full_response = ""
@@ -179,114 +268,103 @@ async def chat_stream(req: ChatRequest):
         async for chunk in mosaic_api.chat_stream(
             req.message,
             conversation_id=conv_id,
-            user_id=req.user_id,
+            user_id=user.username,
         ):
             if chunk["type"] == "agent":
                 agent_name = chunk["agent"]
-                logger.info(f"[stream] Routed to agent: {agent_name}")
             elif chunk["type"] == "token":
                 token_count += 1
             elif chunk["type"] == "done":
                 full_response = chunk.get("full_response", "")
-            
+
             yield f"data: {json.dumps(chunk)}\n\n"
 
-        # Persist messages after streaming is done
         conversation_db.add_message(conv_id, "user", req.message)
         if full_response:
             conversation_db.add_message(conv_id, "assistant", full_response, agent=agent_name)
 
-        logger.info(f"[stream] Complete: conv={conv_id} agent={agent_name} tokens={token_count} length={len(full_response)}")
+        logger.info(f"[stream] Done: conv={conv_id} agent={agent_name} tokens={token_count}")
 
-        # Send final event with conversation_id
         yield f"data: {json.dumps({'type': 'done', 'conversation_id': conv_id, 'full_response': full_response, 'agent': agent_name})}\n\n"
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
 
 
-# --- Conversation CRUD ---
+# --- Conversations (user sees only their own) ---
 @app.post("/conversations")
-async def create_conversation(req: ConversationCreateRequest):
-    """Create a new empty conversation."""
-    convo = conversation_db.create_conversation(title=req.title, user_id=req.user_id)
+async def create_conversation(req: ConversationCreateRequest, user: TokenUser = Depends(get_current_user)):
+    """Create a new conversation."""
+    convo = conversation_db.create_conversation(title=req.title, user_id=user.username)
     return {"id": convo.id, "title": convo.title, "created_at": str(convo.created_at)}
 
 
 @app.get("/conversations")
-async def list_conversations(user_id: Optional[str] = None, limit: int = 50):
-    """List conversations, optionally filtered by user_id."""
-    convos = conversation_db.get_conversations(user_id=user_id, limit=limit)
+async def list_conversations(user: TokenUser = Depends(get_current_user), limit: int = 50):
+    """List conversations for the current user (admin sees all)."""
+    user_filter = None if user.role == "admin" else user.username
+    convos = conversation_db.get_conversations(user_id=user_filter, limit=limit)
     return [
-        {
-            "id": c.id,
-            "title": c.title,
-            "created_at": str(c.created_at),
-            "updated_at": str(c.updated_at),
-        }
+        {"id": c.id, "title": c.title, "created_at": str(c.created_at), "updated_at": str(c.updated_at)}
         for c in convos
     ]
 
 
 @app.get("/conversations/{conversation_id}")
-async def get_conversation(conversation_id: int):
-    """Get all messages for a conversation."""
+async def get_conversation(conversation_id: int, user: TokenUser = Depends(get_current_user)):
+    """Get messages for a conversation. Users can only see their own."""
     convo = conversation_db.get_conversation(conversation_id)
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Enforce ownership (admin can see all)
+    if user.role != "admin" and getattr(convo, 'user_id', None) != user.username:
+        raise HTTPException(status_code=403, detail="Access denied.")
 
     messages = conversation_db.get_messages(conversation_id)
     return {
         "id": convo.id,
         "title": convo.title,
         "messages": [
-            {
-                "id": m.id,
-                "role": m.role,
-                "content": m.content,
-                "agent": m.agent,
-                "timestamp": str(m.timestamp),
-            }
+            {"id": m.id, "role": m.role, "content": m.content, "agent": m.agent, "timestamp": str(m.timestamp)}
             for m in messages
         ],
     }
 
 
 @app.patch("/conversations/{conversation_id}")
-async def update_conversation(conversation_id: int, req: ConversationUpdateRequest):
-    """Update a conversation's title."""
-    success = conversation_db.update_conversation_title(conversation_id, req.title)
-    if not success:
+async def update_conversation(conversation_id: int, req: ConversationUpdateRequest, user: TokenUser = Depends(get_current_user)):
+    """Update a conversation title. Users can only update their own."""
+    convo = conversation_db.get_conversation(conversation_id)
+    if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if user.role != "admin" and getattr(convo, 'user_id', None) != user.username:
+        raise HTTPException(status_code=403, detail="Access denied.")
+
+    conversation_db.update_conversation_title(conversation_id, req.title)
     return {"message": "Conversation updated"}
 
 
 @app.delete("/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: int):
-    """Delete a conversation and all its messages."""
-    success = conversation_db.delete_conversation(conversation_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    return {"message": "Conversation deleted"}
-
-
-@app.get("/conversations/{conversation_id}/stats")
-async def get_conversation_stats(conversation_id: int):
-    """Get statistics for a conversation."""
+async def delete_conversation(conversation_id: int, user: TokenUser = Depends(get_current_user)):
+    """Delete a conversation. Users can only delete their own."""
     convo = conversation_db.get_conversation(conversation_id)
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    return conversation_db.get_conversation_stats(conversation_id)
+    if user.role != "admin" and getattr(convo, 'user_id', None) != user.username:
+        raise HTTPException(status_code=403, detail="Access denied.")
+
+    conversation_db.delete_conversation(conversation_id)
+    return {"message": "Conversation deleted"}
 
 
-# --- Server Management ---
+# =============================================================================
+# USER ENDPOINTS — MCP Servers (any authenticated user)
+# =============================================================================
+
 class AddServerRequest(BaseModel):
     name: str
     description: str
@@ -294,13 +372,12 @@ class AddServerRequest(BaseModel):
 
 
 @app.get("/servers")
-async def list_servers():
+async def list_servers(user: TokenUser = Depends(get_current_user)):
     """List all configured MCP servers with their status."""
     from client import is_server_active
     servers = []
     for config in mosaic_api.server_configs:
         active = await is_server_active(config["url"])
-        # Check if agent is loaded
         agent_loaded = False
         if mosaic_api.mosaic:
             agent_loaded = any(s["name"] == config["name"] for s in mosaic_api.mosaic.agent_specs)
@@ -315,108 +392,74 @@ async def list_servers():
 
 
 @app.post("/servers")
-async def add_server(req: AddServerRequest):
-    """
-    Add a new MCP server configuration and immediately try to connect.
-    If the server is reachable, its tools are loaded and an agent is created.
-    """
-    # Check if server with same name already exists
+async def add_server(req: AddServerRequest, user: TokenUser = Depends(get_current_user)):
+    """Add a new MCP server and try to connect immediately."""
     existing_names = [c["name"] for c in mosaic_api.server_configs]
     if req.name in existing_names:
         raise HTTPException(status_code=400, detail=f"Server '{req.name}' already exists.")
 
-    new_config = {
-        "name": req.name,
-        "description": req.description,
-        "url": req.url,
-    }
+    new_config = {"name": req.name, "description": req.description, "url": req.url}
+    logger.info(f"[{user.username}] Adding MCP server: {req.name} @ {req.url}")
 
-    logger.info(f"Adding MCP server: name={req.name} url={req.url}")
-
-    # Add to the config list
     mosaic_api.server_configs.append(new_config)
     if mosaic_api.mosaic:
         mosaic_api.mosaic.server_configs.append(new_config)
         mosaic_api.mosaic.inactive_agents.append(req.name)
 
-    # Try to connect immediately
     result = await mosaic_api.refresh_servers()
-
     connected = req.name in result.get("connected", [])
-    if connected:
-        logger.info(f"✓ Server '{req.name}' connected and agent loaded")
-    else:
-        logger.warning(f"⚠ Server '{req.name}' added but not reachable")
 
     return {
-        "message": f"Server '{req.name}' added." + (" Connected and agent loaded." if connected else " Server not reachable — will retry on next refresh."),
+        "message": f"Server '{req.name}' added." + (" Connected." if connected else " Not reachable yet."),
         "connected": connected,
         "server": new_config,
     }
 
 
 @app.delete("/servers/{server_name}")
-async def remove_server(server_name: str):
+async def remove_server(server_name: str, user: TokenUser = Depends(get_current_user)):
     """Remove an MCP server configuration and its agent."""
     config = next((c for c in mosaic_api.server_configs if c["name"] == server_name), None)
     if not config:
         raise HTTPException(status_code=404, detail=f"Server '{server_name}' not found.")
 
-    # Remove from config
     mosaic_api.server_configs.remove(config)
-
-    # Remove agent if loaded
     if mosaic_api.mosaic:
         mosaic_api.mosaic.server_configs = [c for c in mosaic_api.mosaic.server_configs if c["name"] != server_name]
         mosaic_api.mosaic.agent_specs = [s for s in mosaic_api.mosaic.agent_specs if s["name"] != server_name]
         if server_name in mosaic_api.mosaic.inactive_agents:
             mosaic_api.mosaic.inactive_agents.remove(server_name)
 
-    logger.info(f"Removed MCP server: {server_name}")
+    logger.info(f"[{user.username}] Removed server: {server_name}")
     return {"message": f"Server '{server_name}' removed."}
 
 
 @app.get("/servers/{server_name}/tools")
-async def get_server_tools(server_name: str):
-    """Get the list of tools available on a connected MCP server."""
+async def get_server_tools(server_name: str, user: TokenUser = Depends(get_current_user)):
+    """List tools for a connected MCP server."""
     if not mosaic_api.mosaic:
-        raise HTTPException(status_code=503, detail="System not initialized yet.")
+        raise HTTPException(status_code=503, detail="System not initialized.")
 
     agent_spec = next((s for s in mosaic_api.mosaic.agent_specs if s["name"] == server_name), None)
     if not agent_spec:
-        raise HTTPException(status_code=404, detail=f"Server '{server_name}' is not connected or not found.")
+        raise HTTPException(status_code=404, detail=f"Server '{server_name}' not connected.")
 
-    # Extract tool info from the agent
     agent = agent_spec["agent"]
     tools = []
-    # LangGraph react agents store tools in the agent's tool node
     if hasattr(agent, 'nodes') and 'tools' in agent.nodes:
         tool_node = agent.nodes['tools']
         if hasattr(tool_node, 'tools_by_name'):
             for name, tool in tool_node.tools_by_name.items():
-                tools.append({
-                    "name": name,
-                    "description": getattr(tool, 'description', ''),
-                })
+                tools.append({"name": name, "description": getattr(tool, 'description', '')})
 
     return {"server": server_name, "tools": tools}
 
 
-@app.get("/status")
-async def get_status():
-    """Get current system status — active agents and inactive MCP servers."""
-    return await mosaic_api.get_status()
-
-
 @app.post("/servers/refresh")
-async def refresh_servers():
-    """
-    Hot-reload MCP servers. Call this after starting a database or calendar server
-    to have Mosaic pick it up without restarting the backend.
-    """
-    logger.info("Refreshing MCP servers...")
+async def refresh_servers(user: TokenUser = Depends(get_current_user)):
+    """Hot-reload MCP servers — detect newly started or stopped servers."""
+    logger.info(f"[{user.username}] Refreshing MCP servers...")
     result = await mosaic_api.refresh_servers()
-    logger.info(f"Refresh complete: connected={result['connected']} inactive={result['inactive']}")
     return {
         "message": "Server refresh complete",
         "connected_mcp_servers": result["connected"],
@@ -424,51 +467,118 @@ async def refresh_servers():
     }
 
 
-# --- Logs Endpoint ---
-@app.get("/logs")
-async def get_logs(lines: int = 100, level: Optional[str] = None):
-    """
-    Get recent log entries. Useful for debugging from the frontend.
-    - lines: number of recent lines to return (default 100)
-    - level: filter by level (ERROR, WARNING, INFO, DEBUG)
-    """
-    import os
+# =============================================================================
+# ADMIN-ONLY ENDPOINTS
+# =============================================================================
+
+@app.get("/admin/status", dependencies=[Depends(require_admin)])
+async def admin_status():
+    """Full system diagnostics. (Admin only)"""
+    import platform
+    status = await mosaic_api.get_status()
+    return {
+        "system": {
+            "python_version": platform.python_version(),
+            "platform": platform.platform(),
+            "model": os.getenv("MODEL_NAME", "llama3.2"),
+        },
+        "agents": status["agents"],
+        "inactive_servers": status["inactive_servers"],
+        "server_configs": [
+            {"name": c["name"], "url": c["url"]} for c in mosaic_api.server_configs
+        ],
+        "conversation_count": len(conversation_db.get_conversations(limit=9999)),
+    }
+
+
+@app.get("/admin/conversations", dependencies=[Depends(require_admin)])
+async def admin_list_all_conversations(limit: int = 100):
+    """List ALL conversations across all users. (Admin only)"""
+    convos = conversation_db.get_conversations(user_id=None, limit=limit)
+    return [
+        {
+            "id": c.id,
+            "title": c.title,
+            "created_at": str(c.created_at),
+            "updated_at": str(c.updated_at),
+        }
+        for c in convos
+    ]
+
+
+@app.delete("/admin/conversations/clear", dependencies=[Depends(require_admin)])
+async def admin_clear_all_conversations():
+    """Delete ALL conversations. Destructive! (Admin only)"""
+    convos = conversation_db.get_conversations(user_id=None, limit=9999)
+    count = 0
+    for c in convos:
+        conversation_db.delete_conversation(c.id)
+        count += 1
+    logger.warning(f"[admin] Cleared all conversations: {count} deleted")
+    return {"message": f"Deleted {count} conversations."}
+
+
+@app.get("/admin/logs", dependencies=[Depends(require_admin)])
+async def admin_get_logs(lines: int = 100, level: Optional[str] = None):
+    """View recent application logs. (Admin only)"""
     log_file = os.path.join(os.path.dirname(__file__), "logs", "mosaic.log")
-    
+
     if not os.path.exists(log_file):
         return {"logs": [], "message": "No log file found yet."}
-    
-    try:
-        with open(log_file, "r") as f:
-            all_lines = f.readlines()
-        
-        # Get last N lines
-        recent = all_lines[-lines:]
-        
-        # Filter by level if specified
-        if level:
-            level_upper = level.upper()
-            recent = [l for l in recent if f"| {level_upper}" in l]
-        
-        return {"logs": [l.rstrip() for l in recent], "total_lines": len(all_lines)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading logs: {str(e)}")
+
+    with open(log_file, "r") as f:
+        all_lines = f.readlines()
+
+    recent = all_lines[-lines:]
+    if level:
+        recent = [l for l in recent if f"| {level.upper()}" in l]
+
+    return {"logs": [l.rstrip() for l in recent], "total_lines": len(all_lines)}
 
 
-@app.get("/logs/errors")
-async def get_error_logs(lines: int = 50):
-    """Get recent error-only logs for quick diagnosis."""
-    import os
+@app.get("/admin/logs/errors", dependencies=[Depends(require_admin)])
+async def admin_get_error_logs(lines: int = 50):
+    """View error-only logs. (Admin only)"""
     log_file = os.path.join(os.path.dirname(__file__), "logs", "mosaic_errors.log")
-    
+
     if not os.path.exists(log_file):
         return {"logs": [], "message": "No errors logged yet."}
-    
-    try:
-        with open(log_file, "r") as f:
-            all_lines = f.readlines()
-        
-        recent = all_lines[-lines:]
-        return {"logs": [l.rstrip() for l in recent], "total_lines": len(all_lines)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading error logs: {str(e)}")
+
+    with open(log_file, "r") as f:
+        all_lines = f.readlines()
+
+    recent = all_lines[-lines:]
+    return {"logs": [l.rstrip() for l in recent], "total_lines": len(all_lines)}
+
+
+@app.get("/admin/logs/requests", dependencies=[Depends(require_admin)])
+async def admin_get_request_logs(lines: int = 100):
+    """View HTTP request logs. (Admin only)"""
+    log_file = os.path.join(os.path.dirname(__file__), "logs", "requests.log")
+
+    if not os.path.exists(log_file):
+        return {"logs": [], "message": "No request logs yet."}
+
+    with open(log_file, "r") as f:
+        all_lines = f.readlines()
+
+    recent = all_lines[-lines:]
+    return {"logs": [l.rstrip() for l in recent], "total_lines": len(all_lines)}
+
+
+@app.get("/admin/config", dependencies=[Depends(require_admin)])
+async def admin_get_config():
+    """View current runtime configuration. (Admin only) Sensitive values are masked."""
+    return {
+        "model": os.getenv("MODEL_NAME", "llama3.2"),
+        "environment": os.getenv("ENVIRONMENT", "development"),
+        "token_expire_hours": int(os.getenv("TOKEN_EXPIRE_HOURS", "24")),
+        "login_rate_limit": int(os.getenv("LOGIN_RATE_LIMIT", "5")),
+        "login_rate_window_sec": int(os.getenv("LOGIN_RATE_WINDOW", "300")),
+        "allowed_origins": ALLOWED_ORIGINS,
+        "log_level": os.getenv("LOG_LEVEL", "INFO"),
+        "tavily_key_set": bool(os.getenv("TAVILY_API_KEY")),
+        "jwt_secret_set": bool(os.getenv("JWT_SECRET")),
+        "admin_user": os.getenv("ADMIN_USERNAME", "admin"),
+        "normal_user": os.getenv("USER_USERNAME", "user"),
+    }

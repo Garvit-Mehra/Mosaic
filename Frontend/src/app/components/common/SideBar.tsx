@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MessageCircle, SquarePen, ChevronLeft, ChevronRight, Trash2, Settings } from "lucide-react";
+import { MessageCircle, SquarePen, ChevronLeft, ChevronRight, Trash2, Settings, LogOut, Shield } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
+import { authFetch } from "@/src/lib/auth";
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -18,31 +20,35 @@ export default function SideBar() {
   const [hovered, setHovered] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const userIsAdmin = (session as any)?.role === "admin" || (session?.user as any)?.role === "admin";
 
   const fetchConversations = async () => {
     try {
-      const res = await fetch(`${BACKEND}/conversations`);
+      const res = await authFetch(`${BACKEND}/conversations`);
       if (res.ok) {
         const data = await res.json();
         setConversations(data);
       }
     } catch {
-      // Backend not available — silent fail
+      // silent
     }
   };
 
   useEffect(() => {
-    fetchConversations();
-    // Refresh every 10s
-    const interval = setInterval(fetchConversations, 10000);
-    return () => clearInterval(interval);
-  }, []);
+    if (session) {
+      fetchConversations();
+      const interval = setInterval(fetchConversations, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [session]);
 
   const deleteConversation = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
     try {
-      await fetch(`${BACKEND}/conversations/${id}`, { method: "DELETE" });
+      await authFetch(`${BACKEND}/conversations/${id}`, { method: "DELETE" });
       setConversations((prev) => prev.filter((c) => c.id !== id));
     } catch {
       // silent
@@ -134,8 +140,8 @@ export default function SideBar() {
           </ul>
         </div>
 
-        {/* Settings link at bottom */}
-        <div className="px-2 py-3 border-t border-[var(--hover)]">
+        {/* Bottom — Servers, Admin, Logout */}
+        <div className="px-2 py-3 border-t border-[var(--hover)] space-y-1">
           <Link
             href="/settings"
             className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors ${
@@ -143,8 +149,28 @@ export default function SideBar() {
             } ${collapsed ? "justify-center" : ""}`}
           >
             <Settings size={16} className="text-[var(--color3)] flex-shrink-0" />
-            {!collapsed && <span className="text-[var(--color3)]">Settings</span>}
+            {!collapsed && <span className="text-[var(--color3)]">Servers</span>}
           </Link>
+          {userIsAdmin && (
+            <Link
+              href="/admin"
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors ${
+                pathname === "/admin" ? "bg-[var(--hover)]" : ""
+              } ${collapsed ? "justify-center" : ""}`}
+            >
+              <Shield size={16} className="text-[var(--color3)] flex-shrink-0" />
+              {!collapsed && <span className="text-[var(--color3)]">Admin</span>}
+            </Link>
+          )}
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors w-full ${
+              collapsed ? "justify-center" : ""
+            }`}
+          >
+            <LogOut size={16} className="text-[var(--color3)] flex-shrink-0" />
+            {!collapsed && <span className="text-[var(--color3)]">Logout</span>}
+          </button>
         </div>
       </div>
     </aside>
