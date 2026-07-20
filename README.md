@@ -5,7 +5,7 @@ A modular multi-agent system with a Next.js frontend and FastAPI backend, powere
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org)
 [![License](https://img.shields.io/badge/License-Non--Commercial-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.1.0-orange.svg)](VERSION)
+[![Version](https://img.shields.io/badge/Version-2.2.0-orange.svg)](VERSION)
 [![MCP](https://img.shields.io/badge/MCP-1.0+-purple.svg)](https://modelcontextprotocol.io/)
 
 ---
@@ -16,29 +16,31 @@ A modular multi-agent system with a Next.js frontend and FastAPI backend, powere
 
 - **Streaming responses** — tokens appear in real-time as the LLM generates them
 - **Full authentication** — NextAuth with Google, GitHub, Microsoft OAuth + credentials
-- **Conversation persistence** — chat history stored in SQLite, survives restarts
+- **Conversation persistence** — PostgreSQL (production) or SQLite (dev)
 - **Hot-reload MCP servers** — add/remove tool servers from the Settings UI without restarting
 - **Admin panel** — system diagnostics, log viewer, config inspector, danger zone
-- **Local-first** — runs entirely on your machine with Ollama
+- **Multi-LLM support** — Ollama, OpenAI, vLLM, TGI, Groq, Together — switch with one env var
+- **Production-ready** — Docker Compose, Redis rate limiting, connection pooling, stateless workers
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────┐         ┌──────────────────────┐
-│  Next.js (3000) │◄───────►│  FastAPI (8080)      │
-│  + NextAuth     │  HTTP   │  Agent Orchestration │
-│  + Middleware   │         │  + JWT Validation    │
+┌─────────────────┐         ┌──────────────────────┐         ┌───────────┐
+│  Next.js (3000) │◄───────►│  FastAPI (8080)      │◄───────►│ PostgreSQL│
+│  + NextAuth     │  HTTP   │  Stateless Handlers  │         │ / SQLite  │
+│  + Middleware   │         │  + JWT Validation    │         └───────────┘
 └─────────────────┘         └──────┬───────────────┘
-                                   │
-                    ┌──────────────┼──────────────┐
-                    ▼              ▼              ▼
-              ┌──────────┐  ┌──────────┐  ┌──────────┐
-              │ Ollama   │  │ DB Server│  │ Calendar │
-              │ (LLM)   │  │ (8000)   │  │ (8010)   │
-              └──────────┘  └──────────┘  └──────────┘
-                              MCP Servers (optional)
+                                   │         ▲
+                    ┌──────────────┼─────┐   │
+                    ▼              ▼     │   ▼
+              ┌──────────┐  ┌────────┐  │ ┌───────┐
+              │ LLM      │  │ MCP    │  │ │ Redis │
+              │ Provider  │  │ Servers│  │ │(cache)│
+              └──────────┘  └────────┘  │ └───────┘
+              Ollama/OpenAI/  Optional   │
+              vLLM/TGI/Groq             │
 ```
 
 ---
@@ -187,6 +189,48 @@ Admin role is assigned via:
 
 ---
 
+## Deployment
+
+### Docker Compose (recommended for production)
+
+```bash
+# Set passwords
+export POSTGRES_PASSWORD=your_secure_password
+
+# Build and start everything
+docker compose up --build -d
+```
+
+This gives you: PostgreSQL (5432) + Redis (6379) + Backend (8080) + Frontend (3000)
+
+### LLM Provider Configuration
+
+Switch between providers with environment variables:
+
+| Provider | Config |
+|----------|--------|
+| Ollama (local) | `LLM_PROVIDER=ollama` `LLM_MODEL=mistral` |
+| OpenAI | `LLM_PROVIDER=openai` `LLM_MODEL=gpt-4o` `LLM_API_KEY=sk-...` |
+| vLLM/TGI | `LLM_PROVIDER=compatible` `LLM_BASE_URL=http://gpu-server:8000/v1` `LLM_MODEL=llama-3.1-8b` |
+| Groq | `LLM_PROVIDER=compatible` `LLM_BASE_URL=https://api.groq.com/openai/v1` `LLM_API_KEY=gsk-...` `LLM_MODEL=llama-3.1-70b-versatile` |
+| Together | `LLM_PROVIDER=compatible` `LLM_BASE_URL=https://api.together.xyz/v1` `LLM_API_KEY=...` `LLM_MODEL=meta-llama/Llama-3-70b-chat-hf` |
+
+### Database
+
+- **Development**: SQLite (default, zero config)
+- **Production**: Set `DATABASE_URL=postgresql://user:pass@host:5432/mosaic`
+
+### Scaling
+
+The backend is stateless — safe to run with multiple workers:
+```bash
+uvicorn cifastapi_mosaic:app --workers 4 --port 8080
+```
+
+Redis is required when running multiple workers (for shared rate limiting).
+
+---
+
 ## Logging
 
 Rotating log files in `Backend/logs/` (auto-created, gitignored):
@@ -226,27 +270,33 @@ Mosaic/
 ├── README.md
 ├── CHANGELOG.md
 ├── LICENSE
+├── VERSION
 ├── requirements.txt
+├── docker-compose.yml            # Full stack: PG + Redis + Backend + Frontend
 ├── .gitignore
 ├── Backend/
 │   ├── .env.example
+│   ├── Dockerfile
 │   ├── cifastapi_mosaic.py       # FastAPI app + middleware
-│   ├── client.py                 # Agent orchestration
+│   ├── client.py                 # AgentRegistry + MosaicHandler (stateless)
 │   ├── utils/
-│   │   ├── auth.py               # JWT + bcrypt + rate limiting
-│   │   ├── logger.py             # Centralized logging
-│   │   ├── ConversationDB.py     # SQLite persistence
-│   │   ├── RAGTools.py           # Document Q&A
+│   │   ├── auth.py               # JWT + bcrypt + user provider interface
+│   │   ├── llm.py                # LLM provider factory (Ollama/OpenAI/compatible)
+│   │   ├── rate_limiter.py       # Redis or in-memory rate limiting
+│   │   ├── logger.py             # Centralized rotating logs
+│   │   ├── ConversationDB.py     # SQLAlchemy (SQLite or PostgreSQL)
+│   │   ├── RAGTools.py           # Document Q&A tools
 │   │   └── ProcessPDF.py         # PDF/image processing
 │   └── servers/
 │       ├── database_server.py    # SQLite MCP server
 │       └── calendar_server.py    # Google Calendar MCP server
 └── Frontend/
     ├── .env.example
+    ├── Dockerfile
     ├── package.json
     ├── middleware.ts              # Route protection
     ├── src/
-    │   ├── auth.ts               # NextAuth v5 config
+    │   ├── auth.ts               # NextAuth v5 config (OAuth + credentials)
     │   ├── lib/auth.ts           # authFetch helper
     │   └── app/
     │       ├── page.tsx          # Chat (streaming)

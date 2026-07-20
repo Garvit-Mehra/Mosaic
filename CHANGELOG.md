@@ -3,6 +3,34 @@
 All notable changes to the Mosaic project will be documented in this file.
 
 
+## [2.2.0] - 2025-07-20
+
+### Added
+- **PostgreSQL Support**: Production database with connection pooling (`pool_size=10`, `max_overflow=20`, `pool_pre_ping`)
+- **Redis Rate Limiter**: Shared across workers, persistent across restarts (uses sorted sets)
+- **LLM Provider Abstraction** (`utils/llm.py`): Single config to switch between Ollama, OpenAI, or any OpenAI-compatible API (vLLM, TGI, Groq, Together)
+- **Docker Setup**: `Dockerfile` for backend and frontend, `docker-compose.yml` for full stack
+- **Database Indexes**: Added composite indexes on `user_id + updated_at` and `conversation_id + timestamp`
+- **MCP_SERVERS Env Var**: Server configs can now be set via JSON environment variable
+- **Health Checks**: Docker services have proper health checks with dependency ordering
+
+### Changed
+- **Stateless Architecture**: Complete rewrite of `client.py` — no in-memory conversation state
+  - `AgentRegistry`: Holds agents, initialized once at startup
+  - `MosaicHandler`: Stateless per-request handler, loads context from DB each time
+  - Safe for `uvicorn --workers N` (multiple concurrent processes)
+- **ConversationDB**: Now reads `DATABASE_URL` from env — auto-switches between SQLite and PostgreSQL
+- **Rate Limiter**: Moved to `utils/rate_limiter.py` with abstract interface — Redis if `REDIS_URL` set, in-memory fallback for dev
+- **LLM Config**: Removed hardcoded `ChatOllama` calls — all models created via `utils/llm.py` factory
+- **Requirements**: Added `psycopg2-binary`, `redis`, `langchain-text-splitters`, `langchain-core`
+- **Admin Status**: Now shows LLM provider, database type, and Redis status
+
+### Removed
+- **In-Memory Conversation State**: The old `Mosaic` class with `deque` history is gone
+- **`MosaicAPI` class**: Replaced by `AgentRegistry` + `MosaicHandler`
+- **Per-process conversation tracking**: No more `self.conversation_id` on the API instance
+
+
 ## [2.1.0] - 2025-07-20
 
 ### Added
