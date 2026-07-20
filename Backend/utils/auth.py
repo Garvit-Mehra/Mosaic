@@ -24,7 +24,6 @@ import secrets
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from typing import Optional, Dict
-from collections import defaultdict
 
 import bcrypt
 import jwt
@@ -59,10 +58,6 @@ if not JWT_SECRET:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("TOKEN_EXPIRE_HOURS", "24"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
-
-# Rate limiting: max N login attempts per IP per window
-LOGIN_RATE_LIMIT = int(os.getenv("LOGIN_RATE_LIMIT", "5"))  # attempts
-LOGIN_RATE_WINDOW = int(os.getenv("LOGIN_RATE_WINDOW", "300"))  # seconds (5 min)
 
 
 # =============================================================================
@@ -166,38 +161,6 @@ class EnvUserProvider(UserProvider):
 
 # --- Active provider (change this line to swap implementations) ---
 user_provider: UserProvider = EnvUserProvider()
-
-
-# =============================================================================
-# Rate Limiting (in-memory, per-IP)
-# =============================================================================
-
-class LoginRateLimiter:
-    """Simple sliding-window rate limiter for login attempts."""
-
-    def __init__(self, max_attempts: int, window_seconds: int):
-        self.max_attempts = max_attempts
-        self.window = window_seconds
-        self._attempts: Dict[str, list] = defaultdict(list)
-
-    def check(self, ip: str) -> bool:
-        """Returns True if the request is allowed, False if rate limited."""
-        now = time.time()
-        # Clean old entries
-        self._attempts[ip] = [t for t in self._attempts[ip] if now - t < self.window]
-        if len(self._attempts[ip]) >= self.max_attempts:
-            return False
-        self._attempts[ip].append(now)
-        return True
-
-    def remaining(self, ip: str) -> int:
-        """How many attempts remain for this IP."""
-        now = time.time()
-        self._attempts[ip] = [t for t in self._attempts[ip] if now - t < self.window]
-        return max(0, self.max_attempts - len(self._attempts[ip]))
-
-
-rate_limiter = LoginRateLimiter(LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW)
 
 
 # =============================================================================

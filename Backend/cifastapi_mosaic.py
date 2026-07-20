@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Depends
-from client import MosaicAPI
+from client import AgentRegistry, MosaicHandler, is_server_active
 from pydantic import BaseModel
 from typing import Optional, List
 from contextlib import asynccontextmanager
@@ -7,15 +7,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from utils.ConversationDB import ConversationManager
 from utils.logger import get_logger, get_request_logger
+from utils.rate_limiter import create_rate_limiter
 from utils.auth import (
-    LoginRequest, TokenUser, TokenResponse,
+    LoginRequest, TokenUser,
     get_current_user, require_admin,
     authenticate_user, create_access_token, create_refresh_token,
-    verify_token, rate_limiter,
+    verify_token,
 )
 import json
 import time
 import os
+
+from dotenv import load_dotenv
+load_dotenv()
+
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
 logger = get_logger("api")
 request_logger = get_request_logger()
@@ -23,7 +29,7 @@ request_logger = get_request_logger()
 # --- Configuration from environment ---
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
-SERVER_CONFIGS = [
+SERVER_CONFIGS = json.loads(os.getenv("MCP_SERVERS", json.dumps([
     {
         "name": "database_server",
         "description": "Handles database operations — create, read, update, delete tables and data.",
@@ -34,21 +40,28 @@ SERVER_CONFIGS = [
         "description": "Manages Google Calendar — view, create, edit, delete events and check availability.",
         "url": "http://localhost:8010/sse"
     },
-]
+])))
 
-mosaic_api = MosaicAPI(SERVER_CONFIGS, web_search=True, model_config=os.getenv("MODEL_NAME", "llama3.2"))
+# Initialize core services
 conversation_db = ConversationManager()
+registry = AgentRegistry()
+handler: Optional[MosaicHandler] = None
+rate_limiter = create_rate_limiter(
+    max_attempts=int(os.getenv("LOGIN_RATE_LIMIT", "5")),
+    window_seconds=int(os.getenv("LOGIN_RATE_WINDOW", "300")),
+)
 
 
 # --- Lifespan ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global handler
     logger.info("🚀 Mosaic backend starting up...")
-    await mosaic_api.initialize()
-    status = await mosaic_api.get_status()
-    logger.info(f"✓ Agents loaded: {status['agents']}")
-    if status['inactive_servers']:
-        logger.warning(f"⚠ Inactive MCP servers: {status['inactive_servers']}")
+    await registry.initialize(SERVER_CONFIGS, web_search=bool(TAVILY_API_KEY))
+    handler = MosaicHandler(registry, conversation_db)
+    logger.info(f"✓ Agents loaded: {[a['name'] for a in registry.agents]}")
+    if registry.inactive_servers:
+        logger.warning(f"⚠ Inactive MCP servers: {registry.inactive_servers}")
     logger.info("✓ Backend ready — accepting requests")
     yield
     logger.info("Mosaic backend shutting down...")
@@ -230,7 +243,7 @@ async def chat(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
 
     logger.info(f"Chat: user={user.username} conv={conv_id} msg='{req.message[:60]}'")
 
-    result = await mosaic_api.chat(
+    result = await handler.chat(
         req.message,
         conversation_id=conv_id,
         user_id=user.username,
@@ -265,7 +278,7 @@ async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_us
         agent_name = None
         token_count = 0
 
-        async for chunk in mosaic_api.chat_stream(
+        async for chunk in handler.chat_stream(
             req.message,
             conversation_id=conv_id,
             user_id=user.username,
@@ -284,7 +297,6 @@ async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_us
             conversation_db.add_message(conv_id, "assistant", full_response, agent=agent_name)
 
         logger.info(f"[stream] Done: conv={conv_id} agent={agent_name} tokens={token_count}")
-
         yield f"data: {json.dumps({'type': 'done', 'conversation_id': conv_id, 'full_response': full_response, 'agent': agent_name})}\n\n"
 
     return StreamingResponse(
@@ -374,13 +386,10 @@ class AddServerRequest(BaseModel):
 @app.get("/servers")
 async def list_servers(user: TokenUser = Depends(get_current_user)):
     """List all configured MCP servers with their status."""
-    from client import is_server_active
     servers = []
-    for config in mosaic_api.server_configs:
+    for config in registry.server_configs:
         active = await is_server_active(config["url"])
-        agent_loaded = False
-        if mosaic_api.mosaic:
-            agent_loaded = any(s["name"] == config["name"] for s in mosaic_api.mosaic.agent_specs)
+        agent_loaded = any(a["name"] == config["name"] for a in registry.agents)
         servers.append({
             "name": config["name"],
             "description": config["description"],
@@ -394,19 +403,17 @@ async def list_servers(user: TokenUser = Depends(get_current_user)):
 @app.post("/servers")
 async def add_server(req: AddServerRequest, user: TokenUser = Depends(get_current_user)):
     """Add a new MCP server and try to connect immediately."""
-    existing_names = [c["name"] for c in mosaic_api.server_configs]
+    existing_names = [c["name"] for c in registry.server_configs]
     if req.name in existing_names:
         raise HTTPException(status_code=400, detail=f"Server '{req.name}' already exists.")
 
     new_config = {"name": req.name, "description": req.description, "url": req.url}
     logger.info(f"[{user.username}] Adding MCP server: {req.name} @ {req.url}")
 
-    mosaic_api.server_configs.append(new_config)
-    if mosaic_api.mosaic:
-        mosaic_api.mosaic.server_configs.append(new_config)
-        mosaic_api.mosaic.inactive_agents.append(req.name)
+    registry.server_configs.append(new_config)
+    registry.inactive_servers.append(req.name)
 
-    result = await mosaic_api.refresh_servers()
+    result = await registry.refresh_mcp_servers()
     connected = req.name in result.get("connected", [])
 
     return {
@@ -419,16 +426,14 @@ async def add_server(req: AddServerRequest, user: TokenUser = Depends(get_curren
 @app.delete("/servers/{server_name}")
 async def remove_server(server_name: str, user: TokenUser = Depends(get_current_user)):
     """Remove an MCP server configuration and its agent."""
-    config = next((c for c in mosaic_api.server_configs if c["name"] == server_name), None)
+    config = next((c for c in registry.server_configs if c["name"] == server_name), None)
     if not config:
         raise HTTPException(status_code=404, detail=f"Server '{server_name}' not found.")
 
-    mosaic_api.server_configs.remove(config)
-    if mosaic_api.mosaic:
-        mosaic_api.mosaic.server_configs = [c for c in mosaic_api.mosaic.server_configs if c["name"] != server_name]
-        mosaic_api.mosaic.agent_specs = [s for s in mosaic_api.mosaic.agent_specs if s["name"] != server_name]
-        if server_name in mosaic_api.mosaic.inactive_agents:
-            mosaic_api.mosaic.inactive_agents.remove(server_name)
+    registry.server_configs.remove(config)
+    registry.agents = [a for a in registry.agents if a["name"] != server_name]
+    if server_name in registry.inactive_servers:
+        registry.inactive_servers.remove(server_name)
 
     logger.info(f"[{user.username}] Removed server: {server_name}")
     return {"message": f"Server '{server_name}' removed."}
@@ -437,10 +442,7 @@ async def remove_server(server_name: str, user: TokenUser = Depends(get_current_
 @app.get("/servers/{server_name}/tools")
 async def get_server_tools(server_name: str, user: TokenUser = Depends(get_current_user)):
     """List tools for a connected MCP server."""
-    if not mosaic_api.mosaic:
-        raise HTTPException(status_code=503, detail="System not initialized.")
-
-    agent_spec = next((s for s in mosaic_api.mosaic.agent_specs if s["name"] == server_name), None)
+    agent_spec = registry.get_agent(server_name)
     if not agent_spec:
         raise HTTPException(status_code=404, detail=f"Server '{server_name}' not connected.")
 
@@ -457,9 +459,9 @@ async def get_server_tools(server_name: str, user: TokenUser = Depends(get_curre
 
 @app.post("/servers/refresh")
 async def refresh_servers(user: TokenUser = Depends(get_current_user)):
-    """Hot-reload MCP servers — detect newly started or stopped servers."""
+    """Hot-reload MCP servers."""
     logger.info(f"[{user.username}] Refreshing MCP servers...")
-    result = await mosaic_api.refresh_servers()
+    result = await registry.refresh_mcp_servers()
     return {
         "message": "Server refresh complete",
         "connected_mcp_servers": result["connected"],
@@ -475,18 +477,18 @@ async def refresh_servers(user: TokenUser = Depends(get_current_user)):
 async def admin_status():
     """Full system diagnostics. (Admin only)"""
     import platform
-    status = await mosaic_api.get_status()
     return {
         "system": {
             "python_version": platform.python_version(),
             "platform": platform.platform(),
-            "model": os.getenv("MODEL_NAME", "llama3.2"),
+            "llm_provider": os.getenv("LLM_PROVIDER", "ollama"),
+            "llm_model": os.getenv("LLM_MODEL", "llama3.2"),
+            "database": os.getenv("DATABASE_URL", "sqlite:///conversations.db").split("://")[0],
+            "redis": "connected" if os.getenv("REDIS_URL") else "in-memory",
         },
-        "agents": status["agents"],
-        "inactive_servers": status["inactive_servers"],
-        "server_configs": [
-            {"name": c["name"], "url": c["url"]} for c in mosaic_api.server_configs
-        ],
+        "agents": [a["name"] for a in registry.agents],
+        "inactive_servers": registry.inactive_servers,
+        "server_configs": [{"name": c["name"], "url": c["url"]} for c in registry.server_configs],
         "conversation_count": len(conversation_db.get_conversations(limit=9999)),
     }
 
@@ -570,15 +572,18 @@ async def admin_get_request_logs(lines: int = 100):
 async def admin_get_config():
     """View current runtime configuration. (Admin only) Sensitive values are masked."""
     return {
-        "model": os.getenv("MODEL_NAME", "llama3.2"),
+        "llm_provider": os.getenv("LLM_PROVIDER", "ollama"),
+        "llm_model": os.getenv("LLM_MODEL", "llama3.2"),
+        "llm_base_url": os.getenv("LLM_BASE_URL", "default"),
+        "database": os.getenv("DATABASE_URL", "sqlite:///conversations.db").split("@")[-1] if "@" in os.getenv("DATABASE_URL", "") else os.getenv("DATABASE_URL", "sqlite:///conversations.db"),
+        "redis": "connected" if os.getenv("REDIS_URL") else "in-memory",
         "environment": os.getenv("ENVIRONMENT", "development"),
         "token_expire_hours": int(os.getenv("TOKEN_EXPIRE_HOURS", "24")),
         "login_rate_limit": int(os.getenv("LOGIN_RATE_LIMIT", "5")),
         "login_rate_window_sec": int(os.getenv("LOGIN_RATE_WINDOW", "300")),
         "allowed_origins": ALLOWED_ORIGINS,
         "log_level": os.getenv("LOG_LEVEL", "INFO"),
+        "max_history_messages": int(os.getenv("MAX_HISTORY_MESSAGES", "10")),
         "tavily_key_set": bool(os.getenv("TAVILY_API_KEY")),
         "jwt_secret_set": bool(os.getenv("JWT_SECRET")),
-        "admin_user": os.getenv("ADMIN_USERNAME", "admin"),
-        "normal_user": os.getenv("USER_USERNAME", "user"),
     }

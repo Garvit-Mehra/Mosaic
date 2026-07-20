@@ -1,4 +1,4 @@
-2.1.0
+2.2.0
 
 ---
 VERSIONING GUIDE
@@ -10,8 +10,8 @@ Format: MAJOR.MINOR.PATCH
   MINOR (0.X.0) — New features, new endpoints, new pages (backward compatible)
   PATCH (0.0.X) — Bug fixes, small tweaks, dependency updates
 
-Current: 2.1.0
-Next expected: 2.1.1 (if bug fix) or 2.2.0 (if new feature)
+Current: 2.2.0
+Next expected: 2.2.1 (if bug fix) or 2.3.0 (if new feature)
 
 ---
 COMMIT MESSAGE FORMAT
@@ -40,6 +40,7 @@ Examples:
 HISTORY
 ---
 
+v2.2.0 — Production infrastructure (PostgreSQL, Redis, LLM abstraction, stateless, Docker)
 v2.1.0 — Full auth system (NextAuth, OAuth, admin panel, security hardening)
 v2.0.0 — Full-stack rewrite (streaming, persistence, settings UI, hot-reload MCP)
 v1.2.0 — Client cleanup, GPT-5 model update
