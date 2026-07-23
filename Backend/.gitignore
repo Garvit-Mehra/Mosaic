@@ -39,6 +39,7 @@ venv.bak/
 *.sqlite
 *.sqlite3
 servers/db.sqlite
+mcp_servers.json
 
 # Google OAuth credentials
 credentials.json

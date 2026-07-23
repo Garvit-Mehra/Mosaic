@@ -35,12 +35,28 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(20), nullable=False, default="user")  # "admin" or "user"
-    verified = Column(Boolean, default=False)  # Email verification status
+    role = Column(String(20), nullable=False, default="user")
+    verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (
         Index('ix_users_email_verified', 'email', 'verified'),
+    )
+
+
+class UserMCPServer(Base):
+    __tablename__ = 'user_mcp_servers'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String(100), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(String(500), nullable=False, default="")
+    url = Column(String(500), nullable=False)
+    transport = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index('ix_user_mcp_user_name', 'user_id', 'name', unique=True),
     )
 
 
@@ -212,3 +228,68 @@ class UserManager:
     def verify_user(self, username: str) -> bool:
         """Mark a user as verified."""
         return self.update_user(username, verified=True)
+
+    # ─────────────────────────────────────────────────────
+    # MCP Server management (per-user)
+    # ─────────────────────────────────────────────────────
+
+    def get_user_servers(self, user_id: str) -> List[dict]:
+        """Get all MCP servers for a user."""
+        with self.get_session() as session:
+            servers = session.query(UserMCPServer).filter(UserMCPServer.user_id == user_id).all()
+            return [
+                {
+                    "name": s.name,
+                    "description": s.description,
+                    "url": s.url,
+                    "transport": s.transport,
+                }
+                for s in servers
+            ]
+
+    def add_user_server(self, user_id: str, name: str, description: str, url: str, transport: Optional[str] = None) -> dict:
+        """Add an MCP server for a user. Raises ValueError if name already exists for this user."""
+        with self.get_session() as session:
+            existing = session.query(UserMCPServer).filter(
+                UserMCPServer.user_id == user_id, UserMCPServer.name == name
+            ).first()
+            if existing:
+                raise ValueError(f"Server '{name}' already exists.")
+
+            server = UserMCPServer(
+                user_id=user_id,
+                name=name,
+                description=description,
+                url=url,
+                transport=transport,
+            )
+            session.add(server)
+            session.flush()
+            return {"name": name, "description": description, "url": url, "transport": transport}
+
+    def update_user_server(self, user_id: str, name: str, description: Optional[str] = None, url: Optional[str] = None, transport: Optional[str] = None) -> bool:
+        """Update an MCP server for a user."""
+        with self.get_session() as session:
+            server = session.query(UserMCPServer).filter(
+                UserMCPServer.user_id == user_id, UserMCPServer.name == name
+            ).first()
+            if not server:
+                return False
+            if description is not None:
+                server.description = description
+            if url is not None:
+                server.url = url
+            if transport is not None:
+                server.transport = transport
+            return True
+
+    def delete_user_server(self, user_id: str, name: str) -> bool:
+        """Delete an MCP server for a user."""
+        with self.get_session() as session:
+            server = session.query(UserMCPServer).filter(
+                UserMCPServer.user_id == user_id, UserMCPServer.name == name
+            ).first()
+            if not server:
+                return False
+            session.delete(server)
+            return True

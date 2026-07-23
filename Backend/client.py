@@ -49,7 +49,7 @@ class MCPClientManager:
         for config in server_configs:
             entry = {k: v for k, v in config.items() if k in ("url", "transport", "command", "args")}
             if "transport" not in entry:
-                entry["transport"] = "sse"
+                entry["transport"] = "streamable_http"  # Modern default
             self.server_dict[config["name"]] = entry
         self.client = MultiServerMCPClient(self.server_dict)
 
@@ -59,9 +59,11 @@ class MCPClientManager:
 
 async def is_server_active(url: str) -> bool:
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=2)) as resp:
-                return resp.status == 200
+        # Skip SSL verification for external servers (some have cert issues on macOS)
+        connector = aiohttp.TCPConnector(ssl=False)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                return resp.status < 400
     except Exception:
         return False
 
@@ -75,8 +77,21 @@ async def get_mcp_tools(client_manager: MCPClientManager, server_name: str):
         logger.info(f"Loaded {len(tools)} tools for {server_name}")
         return tools
     except Exception as e:
-        logger.error(f"Failed to load tools for {server_name}: {e}")
-        return []
+        # If streamable_http failed, try SSE as fallback
+        logger.warning(f"Primary transport failed for {server_name}: {e}. Trying SSE fallback...")
+        try:
+            config = client_manager.server_dict[server_name]
+            fallback_client = MultiServerMCPClient({
+                server_name: {**config, "transport": "sse"}
+            })
+            tools = await fallback_client.get_tools(server_name=server_name)
+            # Update the manager's config to remember the working transport
+            client_manager.server_dict[server_name]["transport"] = "sse"
+            logger.info(f"Loaded {len(tools)} tools for {server_name} via SSE fallback")
+            return tools
+        except Exception as e2:
+            logger.error(f"Both transports failed for {server_name}: {e2}")
+            return []
 
 
 # =============================================================================

@@ -29,18 +29,8 @@ request_logger = get_request_logger()
 # --- Configuration from environment ---
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
-SERVER_CONFIGS = json.loads(os.getenv("MCP_SERVERS", json.dumps([
-    {
-        "name": "database_server",
-        "description": "Handles database operations — create, read, update, delete tables and data.",
-        "url": "http://localhost:8000/sse"
-    },
-    {
-        "name": "calendar_server",
-        "description": "Manages Google Calendar — view, create, edit, delete events and check availability.",
-        "url": "http://localhost:8010/sse"
-    },
-])))
+# Start with no global MCP servers — each user has their own
+SERVER_CONFIGS: list = []
 
 # Initialize core services
 conversation_db = ConversationManager()
@@ -496,19 +486,30 @@ class AddServerRequest(BaseModel):
     name: str
     description: str
     url: str
+    transport: Optional[str] = None
+
+
+class EditServerRequest(BaseModel):
+    description: Optional[str] = None
+    url: Optional[str] = None
 
 
 @app.get("/servers")
 async def list_servers(user: TokenUser = Depends(get_current_user)):
-    """List all configured MCP servers with their status."""
+    """List MCP servers for the current user with live status."""
+    from utils.UserDB import UserManager
+    user_db = UserManager()
+    user_configs = user_db.get_user_servers(user.username)
+
     servers = []
-    for config in registry.server_configs:
+    for config in user_configs:
         active = await is_server_active(config["url"])
         agent_loaded = any(a["name"] == config["name"] for a in registry.agents)
         servers.append({
             "name": config["name"],
             "description": config["description"],
             "url": config["url"],
+            "transport": config.get("transport"),
             "active": active,
             "agent_loaded": agent_loaded,
         })
@@ -517,20 +518,28 @@ async def list_servers(user: TokenUser = Depends(get_current_user)):
 
 @app.post("/servers")
 async def add_server(req: AddServerRequest, user: TokenUser = Depends(get_current_user)):
-    """Add a new MCP server and try to connect immediately."""
-    # Validate URL — only http/https allowed
+    """Add a new MCP server for the current user and try to connect."""
     if not req.url.startswith("http://") and not req.url.startswith("https://"):
         raise HTTPException(status_code=400, detail="Server URL must start with http:// or https://")
 
-    existing_names = [c["name"] for c in registry.server_configs]
-    if req.name in existing_names:
-        raise HTTPException(status_code=400, detail=f"Server '{req.name}' already exists.")
+    from utils.UserDB import UserManager
+    user_db = UserManager()
 
+    try:
+        user_db.add_user_server(user.username, req.name, req.description, req.url, req.transport)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Add to registry and try to connect
     new_config = {"name": req.name, "description": req.description, "url": req.url}
+    if req.transport:
+        new_config["transport"] = req.transport
+
     logger.info(f"[{user.username}] Adding MCP server: {req.name} @ {req.url}")
 
-    registry.server_configs.append(new_config)
-    registry.inactive_servers.append(req.name)
+    if new_config["name"] not in [c["name"] for c in registry.server_configs]:
+        registry.server_configs.append(new_config)
+        registry.inactive_servers.append(req.name)
 
     result = await registry.refresh_mcp_servers()
     connected = req.name in result.get("connected", [])
@@ -542,14 +551,49 @@ async def add_server(req: AddServerRequest, user: TokenUser = Depends(get_curren
     }
 
 
-@app.delete("/servers/{server_name}")
-async def remove_server(server_name: str, user: TokenUser = Depends(get_current_user)):
-    """Remove an MCP server configuration and its agent."""
-    config = next((c for c in registry.server_configs if c["name"] == server_name), None)
-    if not config:
+@app.patch("/servers/{server_name}")
+async def edit_server(server_name: str, req: EditServerRequest, user: TokenUser = Depends(get_current_user)):
+    """Edit an MCP server's description or URL."""
+    if req.url and not req.url.startswith("http://") and not req.url.startswith("https://"):
+        raise HTTPException(status_code=400, detail="Server URL must start with http:// or https://")
+
+    from utils.UserDB import UserManager
+    user_db = UserManager()
+
+    if not user_db.update_user_server(user.username, server_name, description=req.description, url=req.url):
         raise HTTPException(status_code=404, detail=f"Server '{server_name}' not found.")
 
-    registry.server_configs.remove(config)
+    # Update in registry
+    config = next((c for c in registry.server_configs if c["name"] == server_name), None)
+    url_changed = False
+    if config:
+        if req.description is not None:
+            config["description"] = req.description
+        if req.url is not None:
+            url_changed = req.url != config["url"]
+            config["url"] = req.url
+
+    if url_changed:
+        registry.agents = [a for a in registry.agents if a["name"] != server_name]
+        if server_name not in registry.inactive_servers:
+            registry.inactive_servers.append(server_name)
+        await registry.refresh_mcp_servers()
+
+    logger.info(f"[{user.username}] Edited server: {server_name}")
+    return {"message": f"Server '{server_name}' updated."}
+
+
+@app.delete("/servers/{server_name}")
+async def remove_server(server_name: str, user: TokenUser = Depends(get_current_user)):
+    """Remove an MCP server for the current user."""
+    from utils.UserDB import UserManager
+    user_db = UserManager()
+
+    if not user_db.delete_user_server(user.username, server_name):
+        raise HTTPException(status_code=404, detail=f"Server '{server_name}' not found.")
+
+    # Remove from registry
+    registry.server_configs = [c for c in registry.server_configs if c["name"] != server_name]
     registry.agents = [a for a in registry.agents if a["name"] != server_name]
     if server_name in registry.inactive_servers:
         registry.inactive_servers.remove(server_name)
@@ -567,18 +611,47 @@ async def get_server_tools(server_name: str, user: TokenUser = Depends(get_curre
 
     agent = agent_spec["agent"]
     tools = []
+
+    # Try multiple ways to extract tools from the agent
+    # Method 1: LangGraph tool node
     if hasattr(agent, 'nodes') and 'tools' in agent.nodes:
         tool_node = agent.nodes['tools']
         if hasattr(tool_node, 'tools_by_name'):
             for name, tool in tool_node.tools_by_name.items():
                 tools.append({"name": name, "description": getattr(tool, 'description', '')})
 
-    return {"server": server_name, "tools": tools}
+    # Method 2: Check the agent's tools directly
+    if not tools and hasattr(agent, 'tools'):
+        for tool in agent.tools:
+            tools.append({"name": getattr(tool, 'name', ''), "description": getattr(tool, 'description', '')})
+
+    # Method 3: Try getting from the graph's tool node via get_graph
+    if not tools:
+        try:
+            graph = agent.get_graph()
+            for node in graph.nodes.values():
+                if hasattr(node, 'data') and hasattr(node.data, 'tools_by_name'):
+                    for name, tool in node.data.tools_by_name.items():
+                        tools.append({"name": name, "description": getattr(tool, 'description', '')})
+        except Exception:
+            pass
+
+    return {"server": server_name, "tools": tools, "count": len(tools)}
 
 
 @app.post("/servers/refresh")
 async def refresh_servers(user: TokenUser = Depends(get_current_user)):
-    """Hot-reload MCP servers."""
+    """Hot-reload MCP servers for the current user."""
+    from utils.UserDB import UserManager
+    user_db = UserManager()
+
+    # Reload user's servers into the registry
+    user_configs = user_db.get_user_servers(user.username)
+    for config in user_configs:
+        if config["name"] not in [c["name"] for c in registry.server_configs]:
+            registry.server_configs.append(config)
+            registry.inactive_servers.append(config["name"])
+
     logger.info(f"[{user.username}] Refreshing MCP servers...")
     result = await registry.refresh_mcp_servers()
     return {

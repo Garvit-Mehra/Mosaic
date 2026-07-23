@@ -11,6 +11,9 @@ import {
   ChevronDown,
   ChevronRight,
   Wrench,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { authFetch } from "@/src/lib/auth";
 import { useSession } from "next-auth/react";
@@ -47,6 +50,11 @@ export default function SettingsPage() {
   const [newUrl, setNewUrl] = useState("");
   const [addingServer, setAddingServer] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  // Edit server
+  const [editingServer, setEditingServer] = useState<string | null>(null);
+  const [editUrl, setEditUrl] = useState("");
+  const [editDescription, setEditDescription] = useState("");
 
   const fetchServers = async () => {
     try {
@@ -120,6 +128,38 @@ export default function SettingsPage() {
       }
     } catch {
       setFeedback({ type: "error", message: "Failed to remove server." });
+    }
+    setTimeout(() => setFeedback(null), 3000);
+  };
+
+  const startEdit = (server: MCPServer) => {
+    setEditingServer(server.name);
+    setEditUrl(server.url);
+    setEditDescription(server.description);
+  };
+
+  const cancelEdit = () => {
+    setEditingServer(null);
+    setEditUrl("");
+    setEditDescription("");
+  };
+
+  const saveEdit = async (name: string) => {
+    try {
+      const res = await authFetch(`${BACKEND}/servers/${name}`, {
+        method: "PATCH",
+        body: JSON.stringify({ url: editUrl, description: editDescription }),
+      }, token);
+      if (res.ok) {
+        setFeedback({ type: "success", message: `Server '${name}' updated.` });
+        setEditingServer(null);
+        await fetchServers();
+      } else {
+        const data = await res.json();
+        setFeedback({ type: "error", message: data.detail || "Failed to update." });
+      }
+    } catch {
+      setFeedback({ type: "error", message: "Could not reach backend." });
     }
     setTimeout(() => setFeedback(null), 3000);
   };
@@ -198,45 +238,97 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-3 px-4 py-3">
                   <Server className="w-4 h-4 text-[var(--color3)] flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-[var(--color1)]">
-                        {server.name}
-                      </span>
-                      {server.active ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-                      ) : (
-                        <XCircle className="w-3.5 h-3.5 text-red-400" />
-                      )}
-                      {server.agent_loaded && (
-                        <span className="text-xs bg-green-900/40 text-green-300 px-2 py-0.5 rounded-full">
-                          agent active
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-[var(--color3)] truncate">{server.url}</p>
-                    <p className="text-xs text-[var(--color3)] mt-0.5">{server.description}</p>
+                    {editingServer === server.name ? (
+                      /* Edit mode */
+                      <div className="space-y-2">
+                        <span className="text-sm font-medium text-[var(--color1)]">{server.name}</span>
+                        <input
+                          type="text"
+                          value={editUrl}
+                          onChange={(e) => setEditUrl(e.target.value)}
+                          placeholder="URL"
+                          className="w-full px-2 py-1 rounded-lg bg-[var(--color4)] border border-[var(--hover)] text-xs text-[var(--color1)] focus:outline-none focus:border-[var(--color2)]"
+                        />
+                        <input
+                          type="text"
+                          value={editDescription}
+                          onChange={(e) => setEditDescription(e.target.value)}
+                          placeholder="Description"
+                          className="w-full px-2 py-1 rounded-lg bg-[var(--color4)] border border-[var(--hover)] text-xs text-[var(--color1)] focus:outline-none focus:border-[var(--color2)]"
+                        />
+                      </div>
+                    ) : (
+                      /* View mode */
+                      <>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-[var(--color1)]">
+                            {server.name}
+                          </span>
+                          {server.active ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+                          ) : (
+                            <XCircle className="w-3.5 h-3.5 text-red-400" />
+                          )}
+                          {server.agent_loaded && (
+                            <span className="text-xs bg-green-900/40 text-green-300 px-2 py-0.5 rounded-full">
+                              agent active
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-[var(--color3)] truncate">{server.url}</p>
+                        <p className="text-xs text-[var(--color3)] mt-0.5">{server.description}</p>
+                      </>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
-                    {server.agent_loaded && (
-                      <button
-                        onClick={() => fetchTools(server.name)}
-                        className="p-2 rounded-lg hover:bg-[var(--hover)] transition-colors text-[var(--color3)] hover:text-[var(--color1)]"
-                        title="View tools"
-                      >
-                        {expandedServer === server.name ? (
-                          <ChevronDown className="w-4 h-4" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4" />
+                    {editingServer === server.name ? (
+                      <>
+                        <button
+                          onClick={() => saveEdit(server.name)}
+                          className="p-2 rounded-lg hover:bg-[var(--hover)] transition-colors text-green-400"
+                          title="Save"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="p-2 rounded-lg hover:bg-[var(--hover)] transition-colors text-red-400"
+                          title="Cancel"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {server.agent_loaded && (
+                          <button
+                            onClick={() => fetchTools(server.name)}
+                            className="p-2 rounded-lg hover:bg-[var(--hover)] transition-colors text-[var(--color3)] hover:text-[var(--color1)]"
+                            title="View tools"
+                          >
+                            {expandedServer === server.name ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </button>
                         )}
-                      </button>
+                        <button
+                          onClick={() => startEdit(server)}
+                          className="p-2 rounded-lg hover:bg-[var(--hover)] transition-colors text-[var(--color3)] hover:text-[var(--color1)]"
+                          title="Edit server"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => removeServer(server.name)}
+                          className="p-2 rounded-lg hover:bg-[var(--hover)] transition-colors text-[var(--color3)] hover:text-red-400"
+                          title="Remove server"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
                     )}
-                    <button
-                      onClick={() => removeServer(server.name)}
-                      className="p-2 rounded-lg hover:bg-[var(--hover)] transition-colors text-[var(--color3)] hover:text-red-400"
-                      title="Remove server"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
                 </div>
 
@@ -246,30 +338,23 @@ export default function SettingsPage() {
                     {loadingTools === server.name ? (
                       <p className="text-xs text-[var(--color3)]">Loading tools...</p>
                     ) : (tools[server.name] || []).length === 0 ? (
-                      <p className="text-xs text-[var(--color3)]">No tools found.</p>
+                      <p className="text-xs text-[var(--color3)]">No tools detected.</p>
                     ) : (
-                      <div className="space-y-2">
-                        <p className="text-xs text-[var(--color3)] font-medium mb-2">
-                          Available tools ({tools[server.name].length}):
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-[var(--color3)] font-medium">
+                          {tools[server.name].length} tools available
                         </p>
-                        {tools[server.name].map((tool) => (
-                          <div
-                            key={tool.name}
-                            className="flex items-start gap-2 text-xs"
-                          >
-                            <Wrench className="w-3 h-3 text-[var(--color3)] mt-0.5 flex-shrink-0" />
-                            <div>
-                              <span className="text-[var(--color1)] font-medium">
-                                {tool.name}
-                              </span>
-                              {tool.description && (
-                                <p className="text-[var(--color3)] mt-0.5">
-                                  {tool.description}
-                                </p>
-                              )}
+                        <div className="max-h-48 overflow-y-auto space-y-1">
+                          {tools[server.name].map((tool) => (
+                            <div
+                              key={tool.name}
+                              className="flex items-center gap-2 text-xs px-2 py-1 rounded-lg hover:bg-[var(--hover)]"
+                            >
+                              <Wrench className="w-3 h-3 text-[var(--color3)] flex-shrink-0" />
+                              <span className="text-[var(--color1)]">{tool.name}</span>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
