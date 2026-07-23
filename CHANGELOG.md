@@ -3,6 +3,37 @@
 All notable changes to the Mosaic project will be documented in this file.
 
 
+## [2.3.0] - 2026-07-24
+
+### Added
+- **Markdown Rendering**: Assistant messages render with full markdown (code blocks, bold, lists, tables)
+- **Code Syntax Highlighting**: Code blocks get language-specific coloring via highlight.js (github-dark theme)
+- **Copy Message Button**: Hover any assistant message to copy its content with one click
+- **Dark/Light Theme Toggle**: Sun/moon button in sidebar, persists to localStorage
+- **Conversation Search**: Filter sidebar conversations by keyword in real-time
+- **Typing Indicator Animation**: Three pulsing dots with staggered CSS animation
+- **Auto-Scroll Toggle**: Scrolling up pauses auto-scroll; floating ↓ button to jump back
+- **Retry Failed Messages**: ↺ button appears on errored responses to resend the last message
+- **Conversation Auto-Rename**: LLM generates a short title after 3 messages, patches the conversation
+- **Per-User MCP Servers**: Server configs stored in DB per user — persist across restarts, isolated between users
+- **MCP Server Edit Button**: Edit URL and description inline without deleting and re-adding
+- **Transport Auto-Detect**: Tries `streamable_http` first, falls back to `sse` automatically
+- **Navigate Home on Delete**: Deleting the currently viewed conversation redirects to `/`
+- **SSL Skip for Health Checks**: External HTTPS servers no longer fail due to macOS cert issues
+
+### Changed
+- **MCP Default Transport**: Changed from `sse` to `streamable_http` (modern protocol)
+- **Health Check Timeout**: Increased from 2s to 10s, accepts any non-error status code
+- **No Default Servers**: Backend starts with empty server list (was hardcoded database + calendar)
+- **General Agent Prompt**: Added "You have NO tools. Never output JSON or function calls."
+- **Web Agent Prompt**: Clarified to summarize results in plain text
+- **Tools Endpoint**: Tries 3 different methods to extract tools from agent internals
+- **Tools UI**: Shows count + scrollable compact list instead of verbose descriptions
+
+### Removed
+- **Hardcoded MCP Configs**: Removed database_server and calendar_server defaults from source
+
+
 ## [2.2.1] - 2026-07-24
 
 ### Added
