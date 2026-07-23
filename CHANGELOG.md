@@ -3,7 +3,7 @@
 All notable changes to the Mosaic project will be documented in this file.
 
 
-## [2.2.0] - 2025-07-20
+## [2.2.0] - 2026-07-20
 
 ### Added
 - **PostgreSQL Support**: Production database with connection pooling (`pool_size=10`, `max_overflow=20`, `pool_pre_ping`)
@@ -31,7 +31,7 @@ All notable changes to the Mosaic project will be documented in this file.
 - **Per-process conversation tracking**: No more `self.conversation_id` on the API instance
 
 
-## [2.1.0] - 2025-07-20
+## [2.1.0] - 2026-07-20
 
 ### Added
 - **Full Authentication System**: NextAuth v5 with httpOnly cookie sessions
@@ -79,7 +79,7 @@ All notable changes to the Mosaic project will be documented in this file.
 - `JWT_SECRET` required in production mode (fails loudly if missing)
 
 
-## [2.0.0] - 2025-07-13
+## [2.0.0] - 2026-07-13
 
 ### Added
 - **Full-Stack Application**: Next.js 15 frontend with real-time streaming chat UI
