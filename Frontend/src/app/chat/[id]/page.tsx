@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useRef, useEffect, use } from "react";
-import { ArrowUp, Loader2 } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, use } from "react";
+import { ArrowUp, ArrowDown, Loader2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { authFetch } from "@/src/lib/auth";
+import MessageBubble from "@/src/app/components/chat/MessageBubble";
 
 interface Message {
   id: number;
   role: "user" | "assistant";
   content: string;
   agent?: string;
+  error?: boolean;
 }
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -22,7 +24,9 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [autoScroll, setAutoScroll] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: session } = useSession();
   const backendToken = (session as any)?.backendToken;
@@ -54,8 +58,17 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   }, [conversationId, backendToken]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (autoScroll) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, autoScroll]);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    setAutoScroll(isAtBottom);
+  }, []);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -65,18 +78,22 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     }
   }, [input]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+  const sendMessage = async (retryContent?: string) => {
+    const messageContent = retryContent || input.trim();
+    if (!messageContent || loading) return;
 
-    const userMessage: Message = {
-      id: Date.now(),
-      role: "user",
-      content: input.trim(),
-    };
+    if (!retryContent) {
+      const userMessage: Message = {
+        id: Date.now(),
+        role: "user",
+        content: messageContent,
+      };
+      setMessages((prev) => [...prev, userMessage]);
+      setInput("");
+    }
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
     setLoading(true);
+    setAutoScroll(true);
 
     const assistantId = Date.now() + 1;
     setMessages((prev) => [
@@ -85,7 +102,6 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     ]);
 
     try {
-      const backendToken = (session as any)?.backendToken;
       const res = await fetch(`${BACKEND}/chat/stream`, {
         method: "POST",
         headers: {
@@ -93,7 +109,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
           ...(backendToken ? { "Authorization": `Bearer ${backendToken}` } : {}),
         },
         body: JSON.stringify({
-          message: userMessage.content,
+          message: messageContent,
           conversation_id: conversationId,
         }),
       });
@@ -140,6 +156,14 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                     : msg
                 )
               );
+            } else if (event.type === "error") {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantId
+                    ? { ...msg, content: event.content, error: true }
+                    : msg
+                )
+              );
             }
           } catch {
             // Skip malformed JSON
@@ -150,13 +174,20 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantId
-            ? { ...msg, content: "Could not connect to the backend. Is it running?" }
+            ? { ...msg, content: "Could not connect to the backend. Is it running?", error: true }
             : msg
         )
       );
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRetry = (messageIndex: number) => {
+    const userMsg = messages.slice(0, messageIndex).reverse().find((m) => m.role === "user");
+    if (!userMsg) return;
+    setMessages((prev) => prev.filter((_, i) => i !== messageIndex));
+    sendMessage(userMsg.content);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -177,38 +208,41 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   return (
     <div className="flex flex-col h-full">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-6"
+      >
         <div className="max-w-3xl mx-auto space-y-4">
-          {messages.map((msg) => (
-            <div
+          {messages.map((msg, index) => (
+            <MessageBubble
               key={msg.id}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
-                  msg.role === "user"
-                    ? "bg-[var(--user-bubble)] text-[var(--color1)]"
-                    : "text-[var(--color1)]"
-                }`}
-              >
-                {msg.content}
-                {msg.content === "" && msg.role === "assistant" && (
-                  <span className="inline-flex items-center gap-1 text-[var(--color3)]">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  </span>
-                )}
-                {msg.agent && msg.role === "assistant" && msg.content && (
-                  <span className="block text-xs text-[var(--color3)] mt-1 opacity-60">
-                    via {msg.agent}
-                  </span>
-                )}
-              </div>
-            </div>
+              role={msg.role}
+              content={msg.content}
+              agent={msg.agent}
+              isStreaming={loading && msg.role === "assistant" && index === messages.length - 1 && !msg.content}
+              showRetry={msg.error}
+              onRetry={() => handleRetry(index)}
+            />
           ))}
-
           <div ref={bottomRef} />
         </div>
       </div>
+
+      {/* Scroll-to-bottom button */}
+      {!autoScroll && messages.length > 0 && (
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2">
+          <button
+            onClick={() => {
+              setAutoScroll(true);
+              bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="p-2 rounded-full bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color3)] hover:text-[var(--color1)] shadow-lg transition-colors"
+          >
+            <ArrowDown className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t border-[var(--hover)] px-4 py-4">
@@ -224,7 +258,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
               onKeyDown={handleKeyDown}
             />
             <button
-              onClick={sendMessage}
+              onClick={() => sendMessage()}
               disabled={!input.trim() || loading}
               className="p-2 rounded-xl bg-[var(--color2)] text-[var(--color4)] disabled:opacity-30 hover:opacity-80 transition-opacity cursor-pointer disabled:cursor-not-allowed"
             >

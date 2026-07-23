@@ -1,6 +1,8 @@
 @import "tailwindcss";
+@import "highlight.js/styles/github-dark.min.css";
 
-:root {
+/* Dark theme (default) */
+:root, [data-theme="dark"] {
   --color1: #f2f2f2;
   --color2: #eae4d5;
   --color3: #b6b09f;
@@ -14,9 +16,25 @@
   --user-bubble: #2a2520;
 }
 
+/* Light theme */
+[data-theme="light"] {
+  --color1: #1a1a1a;
+  --color2: #4a3f2f;
+  --color3: #6b6555;
+  --color4: #f8f7f4;
+  --hover: #e8e5e050;
+  --main-bg: #ffffff;
+  --sub-bg: #f0ede8;
+  --foreground: #1a1a1a;
+  --background: #ffffff;
+  --input-bg: #f5f3f0;
+  --user-bubble: #ebe7e0;
+}
+
 body {
   background: var(--main-bg);
   color: var(--color1);
+  transition: background-color 0.3s, color 0.3s;
 }
 
 /* Custom scrollbar */
@@ -30,3 +48,19 @@ body {
   background: var(--color3);
   border-radius: 3px;
 }
+
+/* Typing animation */
+@keyframes dot-pulse {
+  0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+  30% { opacity: 1; transform: scale(1); }
+}
+.typing-dot {
+  animation: dot-pulse 1.4s infinite;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color3);
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }

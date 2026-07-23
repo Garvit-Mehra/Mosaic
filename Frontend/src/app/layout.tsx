@@ -4,6 +4,7 @@ import { Roboto } from "next/font/google";
 import { SessionProvider } from "next-auth/react";
 import SideBarWrapper from "./components/common/SideBarWrapper";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { ThemeProvider } from "@/src/lib/theme";
 
 const roboto = Roboto({
   weight: ["400", "500"],
@@ -24,10 +25,12 @@ export default function RootLayout({
     <html lang="en" className={roboto.className}>
       <body className="flex relative h-screen overflow-hidden">
         <ErrorBoundary>
-          <SessionProvider refetchInterval={0} refetchOnWindowFocus={false}>
-            <SideBarWrapper />
-            <main className="flex-1 h-screen overflow-hidden">{children}</main>
-          </SessionProvider>
+          <ThemeProvider>
+            <SessionProvider refetchInterval={0} refetchOnWindowFocus={false}>
+              <SideBarWrapper />
+              <main className="flex-1 h-screen overflow-hidden">{children}</main>
+            </SessionProvider>
+          </ThemeProvider>
         </ErrorBoundary>
       </body>
     </html>

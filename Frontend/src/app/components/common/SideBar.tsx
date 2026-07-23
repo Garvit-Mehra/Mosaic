@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { MessageCircle, SquarePen, ChevronLeft, ChevronRight, Trash2, Settings, LogOut, Shield } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { MessageCircle, SquarePen, ChevronLeft, ChevronRight, Trash2, Settings, LogOut, Shield, Sun, Moon, Search } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { authFetch } from "@/src/lib/auth";
+import { useTheme } from "@/src/lib/theme";
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -19,11 +20,21 @@ export default function SideBar() {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session } = useSession();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const userIsAdmin = (session as any)?.role === "admin" || (session?.user as any)?.role === "admin";
   const backendToken = (session as any)?.backendToken;
+
+  // Filter conversations by search
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery.trim()) return conversations;
+    const q = searchQuery.toLowerCase();
+    return conversations.filter((c) => c.title.toLowerCase().includes(q));
+  }, [conversations, searchQuery]);
 
   const fetchConversations = async () => {
     if (!backendToken) return;
@@ -52,6 +63,10 @@ export default function SideBar() {
     try {
       await authFetch(`${BACKEND}/conversations/${id}`, { method: "DELETE" }, backendToken);
       setConversations((prev) => prev.filter((c) => c.id !== id));
+      // If we just deleted the conversation we're viewing, go home
+      if (pathname === `/chat/${id}`) {
+        router.push("/");
+      }
     } catch {
       // silent
     }
@@ -106,15 +121,30 @@ export default function SideBar() {
           </Link>
         </div>
 
-        {/* Conversations list */}
+        {/* Search + Conversations list */}
         <div className="flex-1 overflow-y-auto px-2">
           {!collapsed && (
-            <div className="px-3 py-1 text-xs text-[var(--color3)] uppercase tracking-wider">
-              Chats
-            </div>
+            <>
+              {/* Search input */}
+              <div className="px-1 py-2">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)]">
+                  <Search size={12} className="text-[var(--color3)] flex-shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Search chats..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="bg-transparent text-xs text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none w-full"
+                  />
+                </div>
+              </div>
+              <div className="px-3 py-1 text-xs text-[var(--color3)] uppercase tracking-wider">
+                Chats
+              </div>
+            </>
           )}
           <ul className="space-y-0.5">
-            {conversations.map((convo) => (
+            {filteredConversations.map((convo) => (
               <li key={convo.id} className="group">
                 <Link
                   href={`/chat/${convo.id}`}
@@ -139,11 +169,27 @@ export default function SideBar() {
                 </Link>
               </li>
             ))}
+            {!collapsed && searchQuery && filteredConversations.length === 0 && (
+              <li className="px-3 py-2 text-xs text-[var(--color3)]">No matches</li>
+            )}
           </ul>
         </div>
 
-        {/* Bottom — Servers, Admin, Logout */}
+        {/* Bottom — Theme, Servers, Admin, Logout */}
         <div className="px-2 py-3 border-t border-[var(--hover)] space-y-1">
+          <button
+            onClick={toggleTheme}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors w-full ${
+              collapsed ? "justify-center" : ""
+            }`}
+          >
+            {theme === "dark" ? (
+              <Sun size={16} className="text-[var(--color3)] flex-shrink-0" />
+            ) : (
+              <Moon size={16} className="text-[var(--color3)] flex-shrink-0" />
+            )}
+            {!collapsed && <span className="text-[var(--color3)]">{theme === "dark" ? "Light mode" : "Dark mode"}</span>}
+          </button>
           <Link
             href="/settings"
             className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors ${
