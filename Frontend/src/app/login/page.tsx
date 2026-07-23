@@ -4,10 +4,17 @@ import { useState, useEffect, Suspense } from "react";
 import { signIn, getProviders } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
+
 function LoginForm() {
+  const [mode, setMode] = useState<"login" | "register" | "verify">("login");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<Record<string, any>>({});
   const searchParams = useSearchParams();
@@ -19,7 +26,7 @@ function LoginForm() {
     });
   }, []);
 
-  const handleCredentials = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) return;
 
@@ -41,6 +48,52 @@ function LoginForm() {
     }
   };
 
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username || !email || !password) return;
+
+    if (password !== confirmPassword) {
+      setError("Passwords don't match");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const res = await fetch(`${BACKEND}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.detail || "Registration failed");
+      } else {
+        setSuccess("Account created! Please verify your email.");
+        setMode("verify");
+      }
+    } catch {
+      setError("Could not connect to the backend.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // PLACEHOLDER: OTP verification not yet implemented
+    setSuccess("Verification is not yet available. You can log in once an admin verifies your account.");
+  };
+
   const oauthProviders = Object.values(providers).filter(
     (p: any) => p.id !== "credentials"
   );
@@ -52,12 +105,14 @@ function LoginForm() {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-semibold text-[var(--color2)]">Mosaic</h1>
           <p className="text-sm text-[var(--color3)] mt-1 italic">
-            Sign in to continue
+            {mode === "login" && "Sign in to continue"}
+            {mode === "register" && "Create your account"}
+            {mode === "verify" && "Verify your email"}
           </p>
         </div>
 
-        {/* OAuth providers */}
-        {oauthProviders.length > 0 && (
+        {/* OAuth providers (login mode only) */}
+        {mode === "login" && oauthProviders.length > 0 && (
           <div className="space-y-2 mb-6">
             {oauthProviders.map((provider: any) => (
               <button
@@ -90,7 +145,6 @@ function LoginForm() {
               </button>
             ))}
 
-            {/* Divider */}
             <div className="flex items-center gap-3 py-2">
               <div className="flex-1 h-px bg-[var(--hover)]" />
               <span className="text-xs text-[var(--color3)]">or</span>
@@ -99,35 +153,143 @@ function LoginForm() {
           </div>
         )}
 
-        {/* Credentials form */}
-        <form onSubmit={handleCredentials} className="space-y-3">
-          <input
-            type="text"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none focus:border-[var(--color2)] text-sm"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none focus:border-[var(--color2)] text-sm"
-          />
+        {/* Login form */}
+        {mode === "login" && (
+          <form onSubmit={handleLogin} className="space-y-3">
+            <input
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none focus:border-[var(--color2)] text-sm"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none focus:border-[var(--color2)] text-sm"
+            />
 
-          {error && (
-            <p className="text-red-400 text-sm text-center">{error}</p>
-          )}
+            {error && <p className="text-red-400 text-sm text-center">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={loading || !username || !password}
-            className="w-full py-3 rounded-xl bg-[var(--color2)] text-[var(--color4)] font-medium text-sm disabled:opacity-40 hover:opacity-80 transition-opacity cursor-pointer disabled:cursor-not-allowed"
-          >
-            {loading ? "Signing in..." : "Sign in"}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={loading || !username || !password}
+              className="w-full py-3 rounded-xl bg-[var(--color2)] text-[var(--color4)] font-medium text-sm disabled:opacity-40 hover:opacity-80 transition-opacity cursor-pointer disabled:cursor-not-allowed"
+            >
+              {loading ? "Signing in..." : "Sign in"}
+            </button>
+
+            <p className="text-center text-sm text-[var(--color3)]">
+              Don&apos;t have an account?{" "}
+              <button
+                type="button"
+                onClick={() => { setMode("register"); setError(""); setSuccess(""); }}
+                className="text-[var(--color2)] hover:underline cursor-pointer"
+              >
+                Register
+              </button>
+            </p>
+          </form>
+        )}
+
+        {/* Register form */}
+        {mode === "register" && (
+          <form onSubmit={handleRegister} className="space-y-3">
+            <input
+              type="text"
+              placeholder="Username (3+ characters)"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none focus:border-[var(--color2)] text-sm"
+            />
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none focus:border-[var(--color2)] text-sm"
+            />
+            <input
+              type="password"
+              placeholder="Password (6+ characters)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none focus:border-[var(--color2)] text-sm"
+            />
+            <input
+              type="password"
+              placeholder="Confirm password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none focus:border-[var(--color2)] text-sm"
+            />
+
+            {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+            {success && <p className="text-green-400 text-sm text-center">{success}</p>}
+
+            <button
+              type="submit"
+              disabled={loading || !username || !email || !password || !confirmPassword}
+              className="w-full py-3 rounded-xl bg-[var(--color2)] text-[var(--color4)] font-medium text-sm disabled:opacity-40 hover:opacity-80 transition-opacity cursor-pointer disabled:cursor-not-allowed"
+            >
+              {loading ? "Creating account..." : "Create account"}
+            </button>
+
+            <p className="text-center text-sm text-[var(--color3)]">
+              Already have an account?{" "}
+              <button
+                type="button"
+                onClick={() => { setMode("login"); setError(""); setSuccess(""); }}
+                className="text-[var(--color2)] hover:underline cursor-pointer"
+              >
+                Sign in
+              </button>
+            </p>
+          </form>
+        )}
+
+        {/* Verify form (placeholder) */}
+        {mode === "verify" && (
+          <form onSubmit={handleVerify} className="space-y-3">
+            <p className="text-sm text-[var(--color3)] text-center mb-2">
+              Enter the verification code sent to your email.
+            </p>
+            <input
+              type="text"
+              placeholder="Enter OTP code"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              maxLength={6}
+              className="w-full px-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none focus:border-[var(--color2)] text-sm text-center tracking-widest"
+            />
+
+            {success && <p className="text-green-400 text-sm text-center">{success}</p>}
+
+            <button
+              type="submit"
+              disabled={!otp}
+              className="w-full py-3 rounded-xl bg-[var(--color2)] text-[var(--color4)] font-medium text-sm disabled:opacity-40 hover:opacity-80 transition-opacity cursor-pointer disabled:cursor-not-allowed"
+            >
+              Verify
+            </button>
+
+            <p className="text-center text-xs text-[var(--color3)] mt-2">
+              Email verification coming soon. Contact an admin to get verified.
+            </p>
+
+            <p className="text-center text-sm text-[var(--color3)]">
+              <button
+                type="button"
+                onClick={() => { setMode("login"); setError(""); setSuccess(""); }}
+                className="text-[var(--color2)] hover:underline cursor-pointer"
+              >
+                Back to sign in
+              </button>
+            </p>
+          </form>
+        )}
       </div>
     </div>
   );

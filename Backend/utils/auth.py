@@ -113,11 +113,7 @@ class UserProvider(ABC):
 class EnvUserProvider(UserProvider):
     """
     User provider backed by environment variables.
-    Suitable for dev/small deployments. Passwords are bcrypt-hashed at startup.
-    
-    Required .env vars:
-        ADMIN_USERNAME, ADMIN_PASSWORD
-        USER_USERNAME, USER_PASSWORD
+    Used as FALLBACK only — if no DB users exist, or for the initial admin bootstrap.
     """
 
     def __init__(self):
@@ -125,7 +121,6 @@ class EnvUserProvider(UserProvider):
         self._load_users()
 
     def _load_users(self):
-        """Load users from environment variables and hash their passwords."""
         admin_user = os.getenv("ADMIN_USERNAME", "admin")
         admin_pass = os.getenv("ADMIN_PASSWORD")
         if admin_pass:
@@ -134,7 +129,6 @@ class EnvUserProvider(UserProvider):
                 "password_hash": bcrypt.hashpw(admin_pass.encode(), bcrypt.gensalt()).decode(),
                 "role": "admin",
             }
-            logger.info(f"Loaded admin user: {admin_user}")
 
         normal_user = os.getenv("USER_USERNAME", "user")
         normal_pass = os.getenv("USER_PASSWORD")
@@ -144,13 +138,6 @@ class EnvUserProvider(UserProvider):
                 "password_hash": bcrypt.hashpw(normal_pass.encode(), bcrypt.gensalt()).decode(),
                 "role": "user",
             }
-            logger.info(f"Loaded user: {normal_user}")
-
-        if not self.users:
-            logger.error(
-                "No users configured! Set ADMIN_PASSWORD and USER_PASSWORD in .env. "
-                "All login attempts will fail."
-            )
 
     def get_user(self, username: str) -> Optional[Dict]:
         return self.users.get(username)
@@ -159,8 +146,32 @@ class EnvUserProvider(UserProvider):
         return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 
-# --- Active provider (change this line to swap implementations) ---
-user_provider: UserProvider = EnvUserProvider()
+class DBUserProvider(UserProvider):
+    """
+    User provider backed by the users database table.
+    Primary provider — falls back to EnvUserProvider for bootstrap admin access.
+    """
+
+    def __init__(self):
+        from utils.UserDB import UserManager
+        self.db = UserManager()
+        self._env_fallback = EnvUserProvider()
+        logger.info("Using database user provider")
+
+    def get_user(self, username: str) -> Optional[Dict]:
+        # Try DB first
+        user = self.db.get_user_by_username(username)
+        if user:
+            return user
+        # Fallback to env vars (for bootstrap admin)
+        return self._env_fallback.get_user(username)
+
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
+
+
+# --- Active provider: DB-backed with env fallback ---
+user_provider: UserProvider = DBUserProvider()
 
 
 # =============================================================================

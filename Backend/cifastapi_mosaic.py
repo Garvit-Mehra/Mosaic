@@ -134,6 +134,52 @@ class ConversationUpdateRequest(BaseModel):
 
 
 # --- Auth ---
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    email: str = Field(..., min_length=5, max_length=255)
+    password: str = Field(..., min_length=6, max_length=128)
+
+
+@app.post("/auth/register")
+async def register(req: RegisterRequest):
+    """
+    Register a new user account.
+    Account is created as unverified — email verification pending (placeholder).
+    """
+    from utils.UserDB import UserManager
+    user_db = UserManager()
+
+    try:
+        user = user_db.create_user(
+            username=req.username,
+            email=req.email,
+            password=req.password,
+            role="user",
+            verified=False,  # Will be set to True after email OTP verification
+        )
+        logger.info(f"New user registered: {req.username} ({req.email})")
+        return {
+            "message": "Account created. Please verify your email.",
+            "username": user["username"],
+            "email": user["email"],
+            "verified": user["verified"],
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/auth/verify")
+async def verify_email(username: str = "", otp: str = ""):
+    """
+    Placeholder for email OTP verification.
+    Currently marks the user as verified without actual OTP check.
+    TODO: Implement actual email sending + OTP validation.
+    """
+    # PLACEHOLDER: In production, validate the OTP code sent to email
+    # For now, this is a no-op endpoint that the frontend calls
+    return {"message": "Verification endpoint placeholder. Not yet implemented."}
+
+
 @app.post("/auth/login")
 async def login(req: LoginRequest, request: Request):
     """
