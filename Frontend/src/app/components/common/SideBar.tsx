@@ -23,10 +23,12 @@ export default function SideBar() {
   const { data: session } = useSession();
 
   const userIsAdmin = (session as any)?.role === "admin" || (session?.user as any)?.role === "admin";
+  const backendToken = (session as any)?.backendToken;
 
   const fetchConversations = async () => {
+    if (!backendToken) return;
     try {
-      const res = await authFetch(`${BACKEND}/conversations`);
+      const res = await authFetch(`${BACKEND}/conversations`, {}, backendToken);
       if (res.ok) {
         const data = await res.json();
         setConversations(data);
@@ -37,18 +39,18 @@ export default function SideBar() {
   };
 
   useEffect(() => {
-    if (session) {
+    if (backendToken) {
       fetchConversations();
       const interval = setInterval(fetchConversations, 10000);
       return () => clearInterval(interval);
     }
-  }, [session]);
+  }, [backendToken]);
 
   const deleteConversation = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
     try {
-      await authFetch(`${BACKEND}/conversations/${id}`, { method: "DELETE" });
+      await authFetch(`${BACKEND}/conversations/${id}`, { method: "DELETE" }, backendToken);
       setConversations((prev) => prev.filter((c) => c.id !== id));
     } catch {
       // silent

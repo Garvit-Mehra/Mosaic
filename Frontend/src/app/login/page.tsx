@@ -17,6 +17,8 @@ function LoginForm() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<Record<string, any>>({});
+  const [usernameStatus, setUsernameStatus] = useState<{ available?: boolean; reason?: string } | null>(null);
+  const [checkingUsername, setCheckingUsername] = useState(false);
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
 
@@ -25,6 +27,38 @@ function LoginForm() {
       if (p) setProviders(p);
     });
   }, []);
+
+  // Debounced username availability check
+  useEffect(() => {
+    if (mode !== "register") return;
+    if (!username || username.length < 3) {
+      setUsernameStatus(null);
+      return;
+    }
+
+    // Validate format locally first
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      setUsernameStatus({ available: false, reason: "Only letters, numbers, and underscores." });
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setCheckingUsername(true);
+      try {
+        const res = await fetch(`${BACKEND}/auth/check-username/${username}`);
+        if (res.ok) {
+          const data = await res.json();
+          setUsernameStatus(data);
+        }
+      } catch {
+        // silent
+      } finally {
+        setCheckingUsername(false);
+      }
+    }, 400); // 400ms debounce
+
+    return () => clearTimeout(timer);
+  }, [username, mode]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,13 +231,32 @@ function LoginForm() {
         {/* Register form */}
         {mode === "register" && (
           <form onSubmit={handleRegister} className="space-y-3">
-            <input
-              type="text"
-              placeholder="Username (3+ characters)"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none focus:border-[var(--color2)] text-sm"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Username (letters, numbers, underscores)"
+                value={username}
+                onChange={(e) => {
+                  // Only allow alphanumeric + underscore
+                  const val = e.target.value.replace(/[^a-zA-Z0-9_]/g, "");
+                  setUsername(val);
+                }}
+                maxLength={50}
+                className="w-full px-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)] text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none focus:border-[var(--color2)] text-sm"
+              />
+              {/* Availability indicator */}
+              {username.length >= 3 && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs">
+                  {checkingUsername ? (
+                    <span className="text-[var(--color3)]">...</span>
+                  ) : usernameStatus?.available ? (
+                    <span className="text-green-400">✓ available</span>
+                  ) : usernameStatus?.reason ? (
+                    <span className="text-red-400">{usernameStatus.reason}</span>
+                  ) : null}
+                </span>
+              )}
+            </div>
             <input
               type="email"
               placeholder="Email"
@@ -231,7 +284,7 @@ function LoginForm() {
 
             <button
               type="submit"
-              disabled={loading || !username || !email || !password || !confirmPassword}
+              disabled={loading || !username || !email || !password || !confirmPassword || (usernameStatus?.available === false)}
               className="w-full py-3 rounded-xl bg-[var(--color2)] text-[var(--color4)] font-medium text-sm disabled:opacity-40 hover:opacity-80 transition-opacity cursor-pointer disabled:cursor-not-allowed"
             >
               {loading ? "Creating account..." : "Create account"}

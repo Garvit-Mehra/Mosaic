@@ -13,6 +13,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { authFetch } from "@/src/lib/auth";
+import { useSession } from "next-auth/react";
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -36,6 +37,8 @@ export default function SettingsPage() {
   const [expandedServer, setExpandedServer] = useState<string | null>(null);
   const [tools, setTools] = useState<Record<string, Tool[]>>({});
   const [loadingTools, setLoadingTools] = useState<string | null>(null);
+  const { data: session } = useSession();
+  const token = (session as any)?.backendToken;
 
   // Add server form
   const [showAddForm, setShowAddForm] = useState(false);
@@ -47,7 +50,7 @@ export default function SettingsPage() {
 
   const fetchServers = async () => {
     try {
-      const res = await authFetch(`${BACKEND}/servers`);
+      const res = await authFetch(`${BACKEND}/servers`, {}, token);
       if (res.ok) {
         const data = await res.json();
         setServers(data.servers);
@@ -66,7 +69,7 @@ export default function SettingsPage() {
   const refreshServers = async () => {
     setRefreshing(true);
     try {
-      await authFetch(`${BACKEND}/servers/refresh`, { method: "POST" });
+      await authFetch(`${BACKEND}/servers/refresh`, { method: "POST" }, token);
       await fetchServers();
       setFeedback({ type: "success", message: "Servers refreshed." });
     } catch {
@@ -88,7 +91,7 @@ export default function SettingsPage() {
           description: newDescription.trim() || `MCP server at ${newUrl.trim()}`,
           url: newUrl.trim(),
         }),
-      });
+      }, token);
       const data = await res.json();
       if (res.ok) {
         setFeedback({ type: "success", message: data.message });
@@ -110,7 +113,7 @@ export default function SettingsPage() {
 
   const removeServer = async (name: string) => {
     try {
-      const res = await authFetch(`${BACKEND}/servers/${name}`, { method: "DELETE" });
+      const res = await authFetch(`${BACKEND}/servers/${name}`, { method: "DELETE" }, token);
       if (res.ok) {
         setServers((prev) => prev.filter((s) => s.name !== name));
         setFeedback({ type: "success", message: `Server '${name}' removed.` });
@@ -129,7 +132,7 @@ export default function SettingsPage() {
     setLoadingTools(serverName);
     setExpandedServer(serverName);
     try {
-      const res = await authFetch(`${BACKEND}/servers/${serverName}/tools`);
+      const res = await authFetch(`${BACKEND}/servers/${serverName}/tools`, {}, token);
       if (res.ok) {
         const data = await res.json();
         setTools((prev) => ({ ...prev, [serverName]: data.tools }));

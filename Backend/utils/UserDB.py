@@ -91,9 +91,11 @@ class UserManager:
         Create a new user. Password is hashed with bcrypt.
         Returns the user dict or raises ValueError if username/email taken.
         """
-        # Validate
-        if len(username) < 3 or len(username) > 50:
-            raise ValueError("Username must be 3-50 characters.")
+        import re
+
+        # Validate username: alphanumeric + underscores only, 3-50 chars
+        if not re.match(r'^[a-zA-Z0-9_]{3,50}$', username):
+            raise ValueError("Username must be 3-50 characters, alphanumeric and underscores only.")
         if len(password) < 6:
             raise ValueError("Password must be at least 6 characters.")
         if "@" not in email:

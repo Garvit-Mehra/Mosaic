@@ -25,12 +25,14 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: session } = useSession();
+  const backendToken = (session as any)?.backendToken;
 
   // Load conversation history
   useEffect(() => {
     const loadConversation = async () => {
+      if (!backendToken) return;
       try {
-        const res = await authFetch(`${BACKEND}/conversations/${conversationId}`);
+        const res = await authFetch(`${BACKEND}/conversations/${conversationId}`, {}, backendToken);
         if (res.ok) {
           const data = await res.json();
           setMessages(
@@ -49,7 +51,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       }
     };
     loadConversation();
-  }, [conversationId]);
+  }, [conversationId, backendToken]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

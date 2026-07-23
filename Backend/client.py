@@ -112,9 +112,11 @@ class AgentRegistry:
                 get_agent_model(),
                 tools=[],
                 prompt=(
-                    "You are Mosaic's general assistant. "
-                    "Respond directly and concisely. "
-                    "Do not restate instructions, system info, or the current date unless explicitly asked."
+                    "You are Mosaic, a helpful AI assistant. "
+                    "You have NO tools. Never output JSON or function calls. "
+                    "Always respond directly in plain text or markdown. "
+                    "Be concise and helpful. Write code when asked. "
+                    "Do not restate the question or add unnecessary preamble."
                 ),
                 checkpointer=MemorySaver()
             ),
@@ -129,9 +131,10 @@ class AgentRegistry:
                     get_agent_model(),
                     tools=[TavilySearch(api_key=TAVILY_API_KEY, max_results=2)],
                     prompt=(
-                        "You are Mosaic's web agent. "
-                        "Use search only for real-time data. "
-                        "Answer with the result directly. Be brief and clear."
+                        "You are Mosaic's web search agent. "
+                        "Use the search tool ONLY when the user needs live/current information. "
+                        "After searching, summarize the results in plain text. "
+                        "Never output raw JSON. Be brief and clear."
                     ),
                     checkpointer=MemorySaver()
                 ),

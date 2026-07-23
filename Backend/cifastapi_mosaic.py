@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request, Depends
 from client import AgentRegistry, MosaicHandler, is_server_active
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
@@ -166,6 +166,21 @@ async def register(req: RegisterRequest):
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/auth/check-username/{username}")
+async def check_username(username: str):
+    """Check if a username is available. No auth required."""
+    import re
+    if not re.match(r'^[a-zA-Z0-9_]{3,50}$', username):
+        return {"available": False, "reason": "Only letters, numbers, and underscores (3-50 chars)."}
+
+    from utils.UserDB import UserManager
+    user_db = UserManager()
+    user = user_db.get_user_by_username(username)
+    if user:
+        return {"available": False, "reason": "Username is taken."}
+    return {"available": True}
 
 
 @app.post("/auth/verify")

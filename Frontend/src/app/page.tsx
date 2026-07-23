@@ -22,6 +22,7 @@ export default function ChatPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: session } = useSession();
+  const backendToken = (session as any)?.backendToken;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -56,7 +57,6 @@ export default function ChatPage() {
     ]);
 
     try {
-      const backendToken = (session as any)?.backendToken;
       const res = await fetch(`${BACKEND}/chat/stream`, {
         method: "POST",
         headers: {

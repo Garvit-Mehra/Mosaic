@@ -12,6 +12,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { authFetch } from "@/src/lib/auth";
+import { useSession } from "next-auth/react";
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -46,6 +47,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const { data: session } = useSession();
+  const token = (session as any)?.backendToken;
 
   useEffect(() => {
     // Admin check handled by middleware — just load data
@@ -56,8 +59,8 @@ export default function AdminPage() {
     setLoading(true);
     try {
       const [statusRes, configRes] = await Promise.all([
-        authFetch(`${BACKEND}/admin/status`),
-        authFetch(`${BACKEND}/admin/config`),
+        authFetch(`${BACKEND}/admin/status`, {}, token),
+        authFetch(`${BACKEND}/admin/config`, {}, token),
       ]);
       if (statusRes.ok) setStatus(await statusRes.json());
       if (configRes.ok) setConfig(await configRes.json());
@@ -69,7 +72,7 @@ export default function AdminPage() {
   };
 
   const loadLogs = async () => {
-    const res = await authFetch(`${BACKEND}/admin/logs?lines=80`);
+    const res = await authFetch(`${BACKEND}/admin/logs?lines=80`, {}, token);
     if (res.ok) {
       const data = await res.json();
       setLogs(data.logs);
@@ -77,7 +80,7 @@ export default function AdminPage() {
   };
 
   const loadErrorLogs = async () => {
-    const res = await authFetch(`${BACKEND}/admin/logs/errors?lines=50`);
+    const res = await authFetch(`${BACKEND}/admin/logs/errors?lines=50`, {}, token);
     if (res.ok) {
       const data = await res.json();
       setErrorLogs(data.logs);
@@ -88,7 +91,7 @@ export default function AdminPage() {
     if (!confirm("Delete ALL conversations for ALL users? This cannot be undone.")) return;
     setClearing(true);
     try {
-      const res = await authFetch(`${BACKEND}/admin/conversations/clear`, { method: "DELETE" });
+      const res = await authFetch(`${BACKEND}/admin/conversations/clear`, { method: "DELETE" }, token);
       if (res.ok) {
         const data = await res.json();
         setFeedback(data.message);

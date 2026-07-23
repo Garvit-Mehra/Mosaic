@@ -3,6 +3,30 @@
 All notable changes to the Mosaic project will be documented in this file.
 
 
+## [2.2.1] - 2026-07-24
+
+### Added
+- **User Registration**: `POST /auth/register` endpoint with username/email/password
+- **Username Availability Check**: `GET /auth/check-username/:name` — real-time validation
+- **Username Input Restriction**: Only allows alphanumeric + underscores, live feedback on the form
+- **Register Page**: New tab on login page with confirm password, format validation, and availability indicator
+- **OTP Verification Placeholder**: UI screen ready for email verification (endpoint is a no-op for now)
+
+### Fixed
+- **Session Polling Spam**: Rewrote `authFetch` to accept a pre-fetched token instead of calling `getSession()` on every request — eliminates constant `/api/auth/session` hits
+- **SessionProvider Config**: Set `refetchInterval={0}` and `refetchOnWindowFocus={false}` — no automatic polling
+- **Middleware Location**: Moved from `Frontend/middleware.ts` to `Frontend/src/middleware.ts` (required for src dir projects)
+- **General Agent Prompt**: Added "You have NO tools. Never output JSON or function calls." — prevents hallucinated tool calls
+- **Web Agent Prompt**: Clarified to summarize results in plain text, not raw JSON
+- **Missing Import**: Added `Field` to pydantic imports in `cifastapi_mosaic.py`
+- **Next.js Console Noise**: Added `logging.fetches.fullUrl: false` to reduce dev server output
+
+### Changed
+- **`authFetch` Signature**: Now `authFetch(url, options, token?)` — callers pass cached token from `useSession()` hook
+- **All Frontend Pages**: Updated to use cached session token instead of re-fetching per request
+- **Username Validation**: Backend rejects usernames with spaces/special characters (regex: `^[a-zA-Z0-9_]{3,50}$`)
+
+
 ## [2.2.0] - 2026-07-20
 
 ### Added

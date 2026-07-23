@@ -18,3 +18,7 @@ Mosaic-old/
 
 # Version tracking (local only)
 VERSION
+
+# Test files (local only)
+test.py
+test_functions.py
