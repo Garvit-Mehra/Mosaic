@@ -25,6 +25,7 @@ Mosaic-old/
 
 # Version tracking (local only)
 VERSION
+TODO.md
 
 # Test files (local only)
 test.py

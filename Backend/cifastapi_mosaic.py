@@ -50,6 +50,11 @@ rate_limiter = create_rate_limiter(
     max_attempts=int(os.getenv("LOGIN_RATE_LIMIT", "5")),
     window_seconds=int(os.getenv("LOGIN_RATE_WINDOW", "300")),
 )
+chat_rate_limiter = create_rate_limiter(
+    max_attempts=int(os.getenv("CHAT_RATE_LIMIT", "20")),
+    window_seconds=int(os.getenv("CHAT_RATE_WINDOW", "60")),
+)
+STREAM_TIMEOUT = int(os.getenv("STREAM_TIMEOUT_SECONDS", "120"))
 
 
 # --- Lifespan ---
@@ -116,12 +121,23 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+# --- Global exception handler (no tracebacks to client) ---
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {type(exc).__name__}: {exc}")
+    return StreamingResponse(
+        iter([json.dumps({"detail": "An internal error occurred. Please try again."})]),
+        status_code=500,
+        media_type="application/json",
+    )
+
+
 # =============================================================================
 # PUBLIC ENDPOINTS (no auth required)
 # =============================================================================
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=10000)
     conversation_id: Optional[int] = None
 
 
@@ -294,9 +310,20 @@ async def oauth_login(req: OAuthRequest):
 @app.post("/chat")
 async def chat(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
     """Send a message and get a response."""
+    # Rate limit per user
+    if not chat_rate_limiter.check(f"chat:{user.username}"):
+        raise HTTPException(status_code=429, detail="Too many messages. Please slow down.")
+
     conv_id = req.conversation_id
 
-    if conv_id is None:
+    # If conversation_id provided, verify ownership
+    if conv_id is not None:
+        convo = conversation_db.get_conversation(conv_id)
+        if not convo:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if user.role != "admin" and getattr(convo, 'user_id', None) != user.username:
+            raise HTTPException(status_code=403, detail="Access denied.")
+    else:
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
         convo = conversation_db.create_conversation(title=title, user_id=user.username)
         conv_id = convo.id
@@ -325,9 +352,22 @@ async def chat(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
     """Stream a response via Server-Sent Events."""
+    import asyncio
+
+    # Rate limit per user
+    if not chat_rate_limiter.check(f"chat:{user.username}"):
+        raise HTTPException(status_code=429, detail="Too many messages. Please slow down.")
+
     conv_id = req.conversation_id
 
-    if conv_id is None:
+    # Verify ownership if conversation_id provided
+    if conv_id is not None:
+        convo = conversation_db.get_conversation(conv_id)
+        if not convo:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        if user.role != "admin" and getattr(convo, 'user_id', None) != user.username:
+            raise HTTPException(status_code=403, detail="Access denied.")
+    else:
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
         convo = conversation_db.create_conversation(title=title, user_id=user.username)
         conv_id = convo.id
@@ -338,21 +378,35 @@ async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_us
         full_response = ""
         agent_name = None
         token_count = 0
+        start_time = time.time()
 
-        async for chunk in handler.chat_stream(
-            req.message,
-            conversation_id=conv_id,
-            user_id=user.username,
-        ):
-            if chunk["type"] == "agent":
-                agent_name = chunk["agent"]
-            elif chunk["type"] == "token":
-                token_count += 1
-            elif chunk["type"] == "done":
-                full_response = chunk.get("full_response", "")
+        try:
+            async for chunk in handler.chat_stream(
+                req.message,
+                conversation_id=conv_id,
+                user_id=user.username,
+            ):
+                # Timeout check
+                if time.time() - start_time > STREAM_TIMEOUT:
+                    yield f"data: {json.dumps({'type': 'error', 'content': 'Response timed out.'})}\n\n"
+                    break
 
-            yield f"data: {json.dumps(chunk)}\n\n"
+                if chunk["type"] == "agent":
+                    agent_name = chunk["agent"]
+                elif chunk["type"] == "token":
+                    token_count += 1
+                elif chunk["type"] == "done":
+                    full_response = chunk.get("full_response", "")
 
+                yield f"data: {json.dumps(chunk)}\n\n"
+
+        except asyncio.TimeoutError:
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Response timed out.'})}\n\n"
+        except Exception as e:
+            logger.error(f"[stream] Error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'content': 'An error occurred.'})}\n\n"
+
+        # Persist messages
         conversation_db.add_message(conv_id, "user", req.message)
         if full_response:
             conversation_db.add_message(conv_id, "assistant", full_response, agent=agent_name)
@@ -464,6 +518,10 @@ async def list_servers(user: TokenUser = Depends(get_current_user)):
 @app.post("/servers")
 async def add_server(req: AddServerRequest, user: TokenUser = Depends(get_current_user)):
     """Add a new MCP server and try to connect immediately."""
+    # Validate URL — only http/https allowed
+    if not req.url.startswith("http://") and not req.url.startswith("https://"):
+        raise HTTPException(status_code=400, detail="Server URL must start with http:// or https://")
+
     existing_names = [c["name"] for c in registry.server_configs]
     if req.name in existing_names:
         raise HTTPException(status_code=400, detail=f"Server '{req.name}' already exists.")
