@@ -13,6 +13,9 @@ venv/
 *.log
 logs/
 
+# PID files
+.pids/
+
 # Python cache
 __pycache__/
 *.pyc

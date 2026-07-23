@@ -21,6 +21,21 @@ A modular multi-agent AI assistant with streaming chat, MCP tool servers, and mu
 ## Quick Start
 
 ```bash
+# Clone and setup (checks all dependencies, installs everything)
+git clone https://github.com/Garvit-Mehra/Mosaic.git
+cd Mosaic
+./setup.sh
+
+# Start all services
+./start.sh
+
+# Stop all services
+./start.sh stop
+```
+
+Or manually:
+
+```bash
 # 1. Backend
 cd Backend
 python -m venv ../.venv && source ../.venv/bin/activate
