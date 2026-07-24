@@ -19,12 +19,12 @@ Mosaic routes user queries to specialized AI agents — general chat, web search
 
 **Key capabilities:**
 
-- 🔀 Intelligent agent routing (general, web, RAG, custom tools)
-- ⚡ Token-level streaming via SSE
-- 🔐 Full authentication (OAuth + credentials, per-user isolation)
-- 🧩 Hot-pluggable MCP tool servers (add/remove without restart)
-- 🗄️ Persistent conversations (SQLite or PostgreSQL)
-- 🐳 Docker-ready with Redis and PostgreSQL
+- Intelligent agent routing (general, web, RAG, custom tools)
+- Token-level streaming via SSE
+- Full authentication (OAuth + credentials, per-user isolation)
+- Hot-pluggable MCP tool servers (add/remove without restart)
+- Persistent conversations (SQLite or PostgreSQL)
+- Docker-ready with Redis and PostgreSQL
 
 ---
 

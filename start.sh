@@ -132,7 +132,7 @@ echo -e "${BLUE}─────────────────────�
 echo ""
 echo -e "  ${GREEN}Mosaic is running!${NC}"
 echo ""
-echo -e "  🌐  ${GREEN}http://localhost:3000${NC}"
+echo -e "  ${GREEN}http://localhost:3000${NC}"
 echo ""
 echo -e "  Logs:"
 echo "    Backend:   $LOG_DIR/backend_stdout.log"

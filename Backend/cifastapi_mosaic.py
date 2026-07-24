@@ -51,7 +51,7 @@ STREAM_TIMEOUT = int(os.getenv("STREAM_TIMEOUT_SECONDS", "120"))
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global handler
-    logger.info("🚀 Mosaic backend starting up...")
+    logger.info("Mosaic backend starting up...")
     await registry.initialize(SERVER_CONFIGS, web_search=bool(TAVILY_API_KEY))
     handler = MosaicHandler(registry, conversation_db)
     logger.info(f"✓ Agents loaded: {[a['name'] for a in registry.agents]}")

@@ -9,13 +9,13 @@
 
 | Method | Path | Auth | Description |
 |--------|------|:----:|-------------|
-| `POST` | `/auth/register` | — | Create account |
-| `GET` | `/auth/check-username/:name` | — | Check availability |
-| `POST` | `/auth/login` | — | Get access + refresh tokens |
-| `POST` | `/auth/refresh` | — | Refresh access token |
-| `POST` | `/auth/verify` | — | Email OTP (placeholder) |
+| `POST` | `/auth/register` | No | Create account |
+| `GET` | `/auth/check-username/:name` | No | Check availability |
+| `POST` | `/auth/login` | No | Get access + refresh tokens |
+| `POST` | `/auth/refresh` | No | Refresh access token |
+| `POST` | `/auth/verify` | No | Email OTP (placeholder) |
 | `POST` | `/auth/oauth` | Internal | Backend token for OAuth |
-| `GET` | `/auth/me` | ✓ | Current user info |
+| `GET` | `/auth/me` | Yes | Current user info |
 
 <details>
 <summary><strong>POST /auth/login</strong></summary>
@@ -43,8 +43,8 @@
 
 | Method | Path | Auth | Description |
 |--------|------|:----:|-------------|
-| `POST` | `/chat` | ✓ | Send message, get response |
-| `POST` | `/chat/stream` | ✓ | Stream response via SSE |
+| `POST` | `/chat` | Yes | Send message, get response |
+| `POST` | `/chat/stream` | Yes | Stream response via SSE |
 
 <details>
 <summary><strong>POST /chat</strong></summary>
@@ -77,11 +77,11 @@ data: {"type": "done", "conversation_id": 5, "full_response": "Hi!", "agent": "g
 
 | Method | Path | Auth | Description |
 |--------|------|:----:|-------------|
-| `POST` | `/conversations` | ✓ | Create conversation |
-| `GET` | `/conversations` | ✓ | List (own for users, all for admin) |
-| `GET` | `/conversations/:id` | ✓ | Get messages |
-| `PATCH` | `/conversations/:id` | ✓ | Update title |
-| `DELETE` | `/conversations/:id` | ✓ | Delete |
+| `POST` | `/conversations` | Yes | Create conversation |
+| `GET` | `/conversations` | Yes | List (own for users, all for admin) |
+| `GET` | `/conversations/:id` | Yes | Get messages |
+| `PATCH` | `/conversations/:id` | Yes | Update title |
+| `DELETE` | `/conversations/:id` | Yes | Delete |
 
 ---
 
@@ -91,12 +91,12 @@ data: {"type": "done", "conversation_id": 5, "full_response": "Hi!", "agent": "g
 
 | Method | Path | Auth | Description |
 |--------|------|:----:|-------------|
-| `GET` | `/servers` | ✓ | List with live status |
-| `POST` | `/servers` | ✓ | Add server |
-| `PATCH` | `/servers/:name` | ✓ | Edit URL / description |
-| `DELETE` | `/servers/:name` | ✓ | Remove |
-| `GET` | `/servers/:name/tools` | ✓ | List tools |
-| `POST` | `/servers/refresh` | ✓ | Re-detect all servers |
+| `GET` | `/servers` | Yes | List with live status |
+| `POST` | `/servers` | Yes | Add server |
+| `PATCH` | `/servers/:name` | Yes | Edit URL / description |
+| `DELETE` | `/servers/:name` | Yes | Remove |
+| `GET` | `/servers/:name/tools` | Yes | List tools |
+| `POST` | `/servers/refresh` | Yes | Re-detect all servers |
 
 <details>
 <summary><strong>POST /servers</strong></summary>
@@ -138,4 +138,4 @@ data: {"type": "done", "conversation_id": 5, "full_response": "Hi!", "agent": "g
 
 | Method | Path | Auth | Description |
 |--------|------|:----:|-------------|
-| `GET` | `/health` | — | `{"status": "ok"}` |
+| `GET` | `/health` | No | `{"status": "ok"}` |
