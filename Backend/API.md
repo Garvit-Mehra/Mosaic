@@ -1,30 +1,30 @@
 # API Reference
 
-Base URL: `http://localhost:8080`
-
-All endpoints except `/auth/login`, `/auth/refresh`, and `/health` require a Bearer token in the `Authorization` header.
+> Base URL: `http://localhost:8080`  
+> All endpoints (except auth and health) require `Authorization: Bearer <token>`
 
 ---
 
 ## Authentication
 
-| Method | Path | Access | Description |
-|--------|------|--------|-------------|
-| `POST` | `/auth/login` | Public | Credentials login → returns access + refresh tokens |
-| `POST` | `/auth/register` | Public | Create a new user account |
-| `GET` | `/auth/check-username/:name` | Public | Check if username is available |
-| `POST` | `/auth/refresh` | Public | Exchange refresh token for new access token |
-| `POST` | `/auth/oauth` | Internal | Backend token for OAuth users (called by NextAuth) |
-| `POST` | `/auth/verify` | Public | Email OTP verification (placeholder) |
-| `GET` | `/auth/me` | Any user | Current user info |
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| `POST` | `/auth/register` | — | Create account |
+| `GET` | `/auth/check-username/:name` | — | Check availability |
+| `POST` | `/auth/login` | — | Get access + refresh tokens |
+| `POST` | `/auth/refresh` | — | Refresh access token |
+| `POST` | `/auth/verify` | — | Email OTP (placeholder) |
+| `POST` | `/auth/oauth` | Internal | Backend token for OAuth |
+| `GET` | `/auth/me` | ✓ | Current user info |
 
-### POST /auth/login
+<details>
+<summary><strong>POST /auth/login</strong></summary>
 
 ```json
 // Request
-{"username": "admin", "password": "..."}
+{ "username": "admin", "password": "..." }
 
-// Response
+// Response 200
 {
   "access_token": "eyJ...",
   "refresh_token": "eyJ...",
@@ -35,98 +35,107 @@ All endpoints except `/auth/login`, `/auth/refresh`, and `/health` require a Bea
 }
 ```
 
+</details>
+
 ---
 
 ## Chat
 
-| Method | Path | Access | Description |
-|--------|------|--------|-------------|
-| `POST` | `/chat` | Any user | Send message, get full response |
-| `POST` | `/chat/stream` | Any user | Streaming response via SSE |
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| `POST` | `/chat` | ✓ | Send message, get response |
+| `POST` | `/chat/stream` | ✓ | Stream response via SSE |
 
-### POST /chat
+<details>
+<summary><strong>POST /chat</strong></summary>
 
 ```json
 // Request
-{"message": "Hello", "conversation_id": null}
+{ "message": "Hello", "conversation_id": null }
 
-// Response
-{"response": "Hi there!", "agent": "general", "conversation_id": 5}
+// Response 200
+{ "response": "Hi!", "agent": "general", "conversation_id": 5 }
 ```
 
-### POST /chat/stream
+</details>
 
-Returns Server-Sent Events:
+<details>
+<summary><strong>POST /chat/stream — SSE Events</strong></summary>
+
 ```
 data: {"type": "agent", "agent": "general"}
 data: {"type": "token", "content": "Hi"}
-data: {"type": "token", "content": " there!"}
-data: {"type": "done", "conversation_id": 5, "full_response": "Hi there!", "agent": "general"}
+data: {"type": "token", "content": "!"}
+data: {"type": "done", "conversation_id": 5, "full_response": "Hi!", "agent": "general"}
 ```
+
+</details>
 
 ---
 
 ## Conversations
 
-| Method | Path | Access | Description |
-|--------|------|--------|-------------|
-| `POST` | `/conversations` | Any user | Create new conversation |
-| `GET` | `/conversations` | Any user | List conversations (users see own, admin sees all) |
-| `GET` | `/conversations/:id` | Any user | Get messages (ownership enforced) |
-| `PATCH` | `/conversations/:id` | Any user | Update title |
-| `DELETE` | `/conversations/:id` | Any user | Delete conversation |
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| `POST` | `/conversations` | ✓ | Create conversation |
+| `GET` | `/conversations` | ✓ | List (own for users, all for admin) |
+| `GET` | `/conversations/:id` | ✓ | Get messages |
+| `PATCH` | `/conversations/:id` | ✓ | Update title |
+| `DELETE` | `/conversations/:id` | ✓ | Delete |
 
 ---
 
-## MCP Servers (per-user)
+## MCP Servers
 
-| Method | Path | Access | Description |
-|--------|------|--------|-------------|
-| `GET` | `/servers` | Any user | List user's servers with live status |
-| `POST` | `/servers` | Any user | Add new MCP server |
-| `PATCH` | `/servers/:name` | Any user | Edit server URL/description |
-| `DELETE` | `/servers/:name` | Any user | Remove server |
-| `GET` | `/servers/:name/tools` | Any user | List tools for a server |
-| `POST` | `/servers/refresh` | Any user | Re-detect online/offline servers |
+> Per-user: each user manages their own server list.
 
-### POST /servers
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| `GET` | `/servers` | ✓ | List with live status |
+| `POST` | `/servers` | ✓ | Add server |
+| `PATCH` | `/servers/:name` | ✓ | Edit URL / description |
+| `DELETE` | `/servers/:name` | ✓ | Remove |
+| `GET` | `/servers/:name/tools` | ✓ | List tools |
+| `POST` | `/servers/refresh` | ✓ | Re-detect all servers |
+
+<details>
+<summary><strong>POST /servers</strong></summary>
 
 ```json
 // Request
-{"name": "my_server", "description": "Does stuff", "url": "https://example.com/mcp", "transport": "streamable_http"}
+{
+  "name": "crypto",
+  "description": "Crypto whale insights",
+  "url": "https://cryptowhaleinsights.com/mcp",
+  "transport": "streamable_http"  // optional, auto-detects
+}
 
-// Response
-{"message": "Server 'my_server' added. Connected.", "connected": true, "server": {...}}
+// Response 200
+{ "message": "Server 'crypto' added. Connected.", "connected": true }
 ```
 
-### PATCH /servers/:name
-
-```json
-// Request (all fields optional)
-{"url": "https://new-url.com/mcp", "description": "Updated description"}
-
-// Response
-{"message": "Server 'my_server' updated."}
-```
+</details>
 
 ---
 
-## Admin (requires admin role)
+## Admin
+
+> Requires `role: "admin"`
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/admin/status` | System diagnostics |
-| `GET` | `/admin/config` | Runtime configuration (secrets masked) |
-| `GET` | `/admin/logs?lines=100&level=ERROR` | Application logs |
-| `GET` | `/admin/logs/errors` | Error-only logs |
-| `GET` | `/admin/logs/requests` | HTTP request logs |
-| `GET` | `/admin/conversations` | All conversations (all users) |
-| `DELETE` | `/admin/conversations/clear` | Wipe all conversations |
+| `GET` | `/admin/config` | Runtime configuration |
+| `GET` | `/admin/logs` | Application logs |
+| `GET` | `/admin/logs/errors` | Error logs |
+| `GET` | `/admin/logs/requests` | Request logs |
+| `GET` | `/admin/conversations` | All conversations |
+| `DELETE` | `/admin/conversations/clear` | Wipe all |
 
 ---
 
 ## Health
 
-| Method | Path | Access | Description |
-|--------|------|--------|-------------|
-| `GET` | `/health` | Public | Returns `{"status": "ok"}` |
+| Method | Path | Auth | Description |
+|--------|------|:----:|-------------|
+| `GET` | `/health` | — | `{"status": "ok"}` |
