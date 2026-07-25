@@ -116,9 +116,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
           // Get a backend token for OAuth users
           try {
+            const oauthSecret = process.env.OAUTH_SHARED_SECRET || "";
             const res = await fetch(`${BACKEND_URL}/auth/oauth`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                ...(oauthSecret ? { "X-OAuth-Secret": oauthSecret } : {}),
+              },
               body: JSON.stringify({
                 email: user.email,
                 name: user.name,

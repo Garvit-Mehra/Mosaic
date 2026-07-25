@@ -17,11 +17,15 @@ from utils.auth import (
 import json
 import time
 import os
+import ipaddress
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 load_dotenv()
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+OAUTH_SHARED_SECRET = os.getenv("OAUTH_SHARED_SECRET", "")
+MAX_REQUEST_BODY_BYTES = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(1 * 1024 * 1024)))  # 1MB default
 
 logger = get_logger("api")
 request_logger = get_request_logger()
@@ -43,6 +47,10 @@ rate_limiter = create_rate_limiter(
 chat_rate_limiter = create_rate_limiter(
     max_attempts=int(os.getenv("CHAT_RATE_LIMIT", "20")),
     window_seconds=int(os.getenv("CHAT_RATE_WINDOW", "60")),
+)
+register_rate_limiter = create_rate_limiter(
+    max_attempts=int(os.getenv("REGISTER_RATE_LIMIT", "3")),
+    window_seconds=int(os.getenv("REGISTER_RATE_WINDOW", "3600")),  # 3 per hour per IP
 )
 STREAM_TIMEOUT = int(os.getenv("STREAM_TIMEOUT_SECONDS", "120"))
 
@@ -71,6 +79,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# --- Request body size limit middleware ---
+@app.middleware("http")
+async def limit_request_body(request: Request, call_next):
+    if request.method in ("POST", "PUT", "PATCH"):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > MAX_REQUEST_BODY_BYTES:
+            return StreamingResponse(
+                iter([json.dumps({"detail": f"Request body too large. Max {MAX_REQUEST_BODY_BYTES // 1024}KB."})]),
+                status_code=413,
+                media_type="application/json",
+            )
+    return await call_next(request)
 
 
 # --- Request logging middleware ---
@@ -147,11 +169,20 @@ class RegisterRequest(BaseModel):
 
 
 @app.post("/auth/register")
-async def register(req: RegisterRequest):
+async def register(req: RegisterRequest, request: Request):
     """
     Register a new user account.
-    Account is created as unverified — email verification pending (placeholder).
+    Rate limited: 3 registrations per hour per IP.
     """
+    client_ip = request.client.host if request.client else "unknown"
+
+    if not register_rate_limiter.check(f"register:{client_ip}"):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many registration attempts. Try again later.",
+            headers={"Retry-After": "3600"},
+        )
+
     from utils.UserDB import UserManager
     user_db = UserManager()
 
@@ -280,13 +311,18 @@ class OAuthRequest(BaseModel):
 
 
 @app.post("/auth/oauth")
-async def oauth_login(req: OAuthRequest):
+async def oauth_login(req: OAuthRequest, request: Request):
     """
     Called by the NextAuth callback to get a backend access token for OAuth users.
-    This endpoint is called server-side from Next.js, not from the browser.
+    Protected by a shared secret to prevent external abuse.
     """
-    # Create a backend token for the OAuth user
-    # The role is determined by the NextAuth callback based on ADMIN_EMAILS
+    # Verify shared secret (set in both Backend/.env and Frontend/.env)
+    if OAUTH_SHARED_SECRET:
+        provided_secret = request.headers.get("X-OAuth-Secret", "")
+        if provided_secret != OAUTH_SHARED_SECRET:
+            logger.warning(f"OAuth endpoint called with invalid secret from {request.client.host if request.client else 'unknown'}")
+            raise HTTPException(status_code=403, detail="Forbidden.")
+
     access_token = create_access_token(req.email, req.role)
     logger.info(f"OAuth login: {req.email} via {req.provider} (role={req.role})")
     return {"access_token": access_token}
@@ -494,6 +530,45 @@ class EditServerRequest(BaseModel):
     url: Optional[str] = None
 
 
+def validate_server_url(url: str):
+    """
+    Validate MCP server URL to prevent SSRF attacks.
+    Blocks private IPs, loopback, link-local, and metadata endpoints.
+    """
+    if not url.startswith("http://") and not url.startswith("https://"):
+        raise HTTPException(status_code=400, detail="Server URL must start with http:// or https://")
+
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+
+    if not hostname:
+        raise HTTPException(status_code=400, detail="Invalid URL: no hostname.")
+
+    # Block obvious dangerous hostnames
+    blocked_hostnames = {"localhost", "0.0.0.0", "metadata.google.internal"}
+    if hostname in blocked_hostnames:
+        raise HTTPException(status_code=400, detail="This hostname is not allowed.")
+
+    # Resolve and check IP ranges
+    try:
+        import socket
+        resolved = socket.getaddrinfo(hostname, None)
+        for _, _, _, _, addr in resolved:
+            ip = ipaddress.ip_address(addr[0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Server URL resolves to a private/internal IP address. This is not allowed."
+                )
+    except socket.gaierror:
+        # Can't resolve — allow it (might be a hostname only reachable from certain networks)
+        pass
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+
 @app.get("/servers")
 async def list_servers(user: TokenUser = Depends(get_current_user)):
     """List MCP servers for the current user with live status."""
@@ -519,8 +594,7 @@ async def list_servers(user: TokenUser = Depends(get_current_user)):
 @app.post("/servers")
 async def add_server(req: AddServerRequest, user: TokenUser = Depends(get_current_user)):
     """Add a new MCP server for the current user and try to connect."""
-    if not req.url.startswith("http://") and not req.url.startswith("https://"):
-        raise HTTPException(status_code=400, detail="Server URL must start with http:// or https://")
+    validate_server_url(req.url)
 
     from utils.UserDB import UserManager
     user_db = UserManager()
@@ -554,8 +628,8 @@ async def add_server(req: AddServerRequest, user: TokenUser = Depends(get_curren
 @app.patch("/servers/{server_name}")
 async def edit_server(server_name: str, req: EditServerRequest, user: TokenUser = Depends(get_current_user)):
     """Edit an MCP server's description or URL."""
-    if req.url and not req.url.startswith("http://") and not req.url.startswith("https://"):
-        raise HTTPException(status_code=400, detail="Server URL must start with http:// or https://")
+    if req.url:
+        validate_server_url(req.url)
 
     from utils.UserDB import UserManager
     user_db = UserManager()
