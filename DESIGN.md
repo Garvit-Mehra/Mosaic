@@ -11,7 +11,7 @@
 Mosaic is a multi-agent AI assistant with a distributed task processing backend. The system has two major subsystems:
 
 1. **Chat System** — real-time agent routing, streaming LLM responses, conversation persistence
-2. **TaskQueue** — fault-tolerant distributed job processing for long-running operations
+2. **FlowQ** — fault-tolerant distributed job processing for long-running operations
 
 Both share PostgreSQL and Redis infrastructure.
 
@@ -31,7 +31,7 @@ graph TB
         API[REST API]
         AgentRouter[Agent Router / Classifier]
         Handler[Stateless Chat Handler]
-        JobBridge[TaskQueue Bridge]
+        JobBridge[FlowQ Bridge]
     end
 
     subgraph "AI Layer"
@@ -40,7 +40,7 @@ graph TB
         RAG[RAG / Vector Store]
     end
 
-    subgraph "TaskQueue"
+    subgraph "FlowQ"
         Coordinator[Job Coordinator]
         Scheduler[Scheduler Loop]
         Workers[Worker Pool]
@@ -95,7 +95,7 @@ sequenceDiagram
     participant BG as Background Check
     participant CL as Classifier LLM
     participant A as Agent
-    participant TQ as TaskQueue
+    participant TQ as FlowQ
     participant DB as PostgreSQL
 
     C->>F: Send message
@@ -162,7 +162,7 @@ Returns a single agent name. The chosen agent then processes the full message wi
 
 ---
 
-## TaskQueue
+## FlowQ
 
 ### Purpose
 
@@ -365,7 +365,7 @@ Collected in real-time via Redis sorted sets (60s sliding window):
 | Latency P50/P95 | Sorted latency samples, nearest-rank percentile |
 | DLQ size | `ZCARD queue:dlq` |
 
-Exposed via `GET /taskqueue/metrics` and visible in the admin panel.
+Exposed via `GET /flowq/metrics` and visible in the admin panel.
 
 ---
 

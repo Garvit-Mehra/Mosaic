@@ -332,7 +332,7 @@ class MosaicHandler:
     async def chat(self, message: str, conversation_id: Optional[int] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Process a chat message (non-streaming). Stateless.
         
-        Detects long-running operations and offloads them to the TaskQueue,
+        Detects long-running operations and offloads them to the FlowQ,
         returning an immediate status message instead of blocking.
         """
         # Check if this is a background-eligible operation
@@ -364,15 +364,15 @@ class MosaicHandler:
     async def _check_background_task(self, message: str, user_id: Optional[str]) -> Optional[Dict[str, Any]]:
         """
         Detect if a message requires a long-running background operation.
-        If so, submit it to the TaskQueue and return an immediate response.
+        If so, submit it to the FlowQ and return an immediate response.
         Returns None if the message should be processed normally.
         """
         msg_lower = message.lower().strip()
 
         try:
-            from taskqueue.src.mosaic_bridge import submit_background_job
+            from flowq.src.mosaic_bridge import submit_background_job
         except ImportError:
-            # TaskQueue not available — process everything synchronously
+            # FlowQ not available — process everything synchronously
             return None
 
         # Pattern: "load/process/index [file path]"
@@ -424,7 +424,7 @@ class MosaicHandler:
         for keyword in status_keywords:
             if keyword in msg_lower:
                 import re
-                from taskqueue.src.mosaic_bridge import get_job_result
+                from flowq.src.mosaic_bridge import get_job_result
                 # Look for a UUID-like pattern
                 uuid_match = re.search(r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', msg_lower)
                 if uuid_match:

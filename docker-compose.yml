@@ -53,12 +53,12 @@ services:
     volumes:
       - backend_logs:/app/logs
 
-  # --- TaskQueue Workers ---
-  taskqueue-worker:
+  # --- FlowQ Workers ---
+  flowq-worker:
     build:
       context: .
       dockerfile: Backend/Dockerfile
-    command: ["python", "-m", "taskqueue.src.workers.pool"]
+    command: ["python", "-m", "flowq.src.workers.pool"]
     env_file:
       - Backend/.env
     environment:

@@ -1,12 +1,12 @@
 """
-Mosaic <-> TaskQueue Integration Bridge
+Mosaic <-> FlowQ Integration Bridge
 
 This module connects Mosaic's agent system to the distributed job queue.
 Long-running operations (RAG processing, MCP tool calls, heavy computations)
 are submitted as background jobs instead of blocking the chat response.
 
 Usage from Mosaic:
-    from taskqueue.src.mosaic_bridge import submit_background_job, get_job_result
+    from flowq.src.mosaic_bridge import submit_background_job, get_job_result
 
     # Submit a long-running task
     job_id = await submit_background_job(
@@ -28,11 +28,11 @@ logger = logging.getLogger(__name__)
 
 
 async def get_coordinator():
-    """Get the TaskQueue coordinator from the running app state."""
-    from taskqueue.src.database import async_session_factory
-    from taskqueue.src.redis_client import get_redis_client
-    from taskqueue.src.core.priority_queue import RedisPriorityQueue
-    from taskqueue.src.core.coordinator import JobCoordinator
+    """Get the FlowQ coordinator from the running app state."""
+    from flowq.src.database import async_session_factory
+    from flowq.src.redis_client import get_redis_client
+    from flowq.src.core.priority_queue import RedisPriorityQueue
+    from flowq.src.core.coordinator import JobCoordinator
 
     redis_client = get_redis_client()
     priority_queue = RedisPriorityQueue(redis_client=redis_client)

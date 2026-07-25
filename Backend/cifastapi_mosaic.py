@@ -80,16 +80,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount TaskQueue as a sub-application at /jobs
+# Mount FlowQ as a sub-application at /jobs
 try:
-    from taskqueue.src.main import create_app as create_taskqueue_app
-    taskqueue_app = create_taskqueue_app()
-    app.mount("/taskqueue", taskqueue_app)
-    logger.info("TaskQueue mounted at /taskqueue")
+    from flowq.src.main import create_app as create_flowq_app
+    flowq_app = create_flowq_app()
+    app.mount("/flowq", flowq_app)
+    logger.info("FlowQ mounted at /flowq")
 except ImportError as e:
-    logger.warning(f"TaskQueue not available (missing dependencies): {e}")
+    logger.warning(f"FlowQ not available (missing dependencies): {e}")
 except Exception as e:
-    logger.warning(f"TaskQueue failed to initialize: {e}")
+    logger.warning(f"FlowQ failed to initialize: {e}")
 
 
 # --- Request body size limit middleware ---
@@ -882,9 +882,9 @@ class JobSubmitRequest(BaseModel):
 async def submit_job(req: JobSubmitRequest, user: TokenUser = Depends(get_current_user)):
     """Submit a background job to the task queue."""
     try:
-        from taskqueue.src.mosaic_bridge import submit_background_job, JOB_TYPES
+        from flowq.src.mosaic_bridge import submit_background_job, JOB_TYPES
     except ImportError:
-        raise HTTPException(status_code=503, detail="TaskQueue not available.")
+        raise HTTPException(status_code=503, detail="FlowQ not available.")
 
     if req.job_type not in JOB_TYPES:
         raise HTTPException(status_code=400, detail=f"Unknown job type. Available: {list(JOB_TYPES.keys())}")
@@ -906,9 +906,9 @@ async def submit_job(req: JobSubmitRequest, user: TokenUser = Depends(get_curren
 async def get_job_status(job_id: str, user: TokenUser = Depends(get_current_user)):
     """Get the status and result of a background job."""
     try:
-        from taskqueue.src.mosaic_bridge import get_job_result
+        from flowq.src.mosaic_bridge import get_job_result
     except ImportError:
-        raise HTTPException(status_code=503, detail="TaskQueue not available.")
+        raise HTTPException(status_code=503, detail="FlowQ not available.")
 
     result = await get_job_result(job_id)
     if result["status"] == "not_found":
@@ -920,9 +920,9 @@ async def get_job_status(job_id: str, user: TokenUser = Depends(get_current_user
 async def cancel_job_endpoint(job_id: str, user: TokenUser = Depends(get_current_user)):
     """Cancel a pending or queued job."""
     try:
-        from taskqueue.src.mosaic_bridge import cancel_job
+        from flowq.src.mosaic_bridge import cancel_job
     except ImportError:
-        raise HTTPException(status_code=503, detail="TaskQueue not available.")
+        raise HTTPException(status_code=503, detail="FlowQ not available.")
 
     success = await cancel_job(job_id)
     if not success:
