@@ -43,6 +43,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://mosaic:${POSTGRES_PASSWORD:-mosaic_dev_password}@postgres:5432/mosaic
       - REDIS_URL=redis://redis:6379/0
+      - JQ_POSTGRES_URL=postgresql+asyncpg://mosaic:${POSTGRES_PASSWORD:-mosaic_dev_password}@postgres:5432/mosaic
+      - JQ_REDIS_URL=redis://redis:6379/1
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,6 +52,24 @@ services:
         condition: service_healthy
     volumes:
       - backend_logs:/app/logs
+
+  # --- TaskQueue Workers ---
+  taskqueue-worker:
+    build:
+      context: .
+      dockerfile: Backend/Dockerfile
+    command: ["python", "-m", "taskqueue.src.workers.pool"]
+    env_file:
+      - Backend/.env
+    environment:
+      - JQ_POSTGRES_URL=postgresql+asyncpg://mosaic:${POSTGRES_PASSWORD:-mosaic_dev_password}@postgres:5432/mosaic
+      - JQ_REDIS_URL=redis://redis:6379/1
+      - JQ_WORKER_COUNT=4
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   # --- Frontend (Next.js) ---
   frontend:

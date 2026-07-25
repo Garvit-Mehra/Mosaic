@@ -75,10 +75,21 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=False,  # credentials not needed (we use Bearer tokens in headers)
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount TaskQueue as a sub-application at /jobs
+try:
+    from taskqueue.src.main import create_app as create_taskqueue_app
+    taskqueue_app = create_taskqueue_app()
+    app.mount("/taskqueue", taskqueue_app)
+    logger.info("TaskQueue mounted at /taskqueue")
+except ImportError as e:
+    logger.warning(f"TaskQueue not available (missing dependencies): {e}")
+except Exception as e:
+    logger.warning(f"TaskQueue failed to initialize: {e}")
 
 
 # --- Request body size limit middleware ---
@@ -853,3 +864,67 @@ async def admin_get_config():
         "tavily_key_set": bool(os.getenv("TAVILY_API_KEY")),
         "jwt_secret_set": bool(os.getenv("JWT_SECRET")),
     }
+
+
+# =============================================================================
+# JOBS — Background Task Queue (authenticated)
+# =============================================================================
+
+class JobSubmitRequest(BaseModel):
+    job_type: str = Field(..., description="Job type: mcp_tool_call, rag_process, web_scrape, batch_chat")
+    payload: dict = Field(default_factory=dict)
+    priority: int = Field(default=5, ge=1, le=10000)
+    timeout_seconds: int = Field(default=300, ge=1, le=86400)
+    max_retries: int = Field(default=2, ge=0, le=10)
+
+
+@app.post("/jobs")
+async def submit_job(req: JobSubmitRequest, user: TokenUser = Depends(get_current_user)):
+    """Submit a background job to the task queue."""
+    try:
+        from taskqueue.src.mosaic_bridge import submit_background_job, JOB_TYPES
+    except ImportError:
+        raise HTTPException(status_code=503, detail="TaskQueue not available.")
+
+    if req.job_type not in JOB_TYPES:
+        raise HTTPException(status_code=400, detail=f"Unknown job type. Available: {list(JOB_TYPES.keys())}")
+
+    job_id = await submit_background_job(
+        job_type=req.job_type,
+        payload=req.payload,
+        user_id=user.username,
+        priority=req.priority,
+        timeout_seconds=req.timeout_seconds,
+        max_retries=req.max_retries,
+    )
+
+    logger.info(f"[{user.username}] Submitted job: type={req.job_type} id={job_id}")
+    return {"job_id": job_id, "status": "queued"}
+
+
+@app.get("/jobs/{job_id}")
+async def get_job_status(job_id: str, user: TokenUser = Depends(get_current_user)):
+    """Get the status and result of a background job."""
+    try:
+        from taskqueue.src.mosaic_bridge import get_job_result
+    except ImportError:
+        raise HTTPException(status_code=503, detail="TaskQueue not available.")
+
+    result = await get_job_result(job_id)
+    if result["status"] == "not_found":
+        raise HTTPException(status_code=404, detail="Job not found.")
+    return result
+
+
+@app.delete("/jobs/{job_id}")
+async def cancel_job_endpoint(job_id: str, user: TokenUser = Depends(get_current_user)):
+    """Cancel a pending or queued job."""
+    try:
+        from taskqueue.src.mosaic_bridge import cancel_job
+    except ImportError:
+        raise HTTPException(status_code=503, detail="TaskQueue not available.")
+
+    success = await cancel_job(job_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Job could not be cancelled (may already be running).")
+    return {"message": f"Job {job_id} cancelled."}

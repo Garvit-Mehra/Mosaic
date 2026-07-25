@@ -330,7 +330,16 @@ class MosaicHandler:
         return name
 
     async def chat(self, message: str, conversation_id: Optional[int] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Process a chat message (non-streaming). Stateless."""
+        """Process a chat message (non-streaming). Stateless.
+        
+        Detects long-running operations and offloads them to the TaskQueue,
+        returning an immediate status message instead of blocking.
+        """
+        # Check if this is a background-eligible operation
+        bg_result = await self._check_background_task(message, user_id)
+        if bg_result:
+            return bg_result
+
         messages = self._build_context(conversation_id, message)
 
         agent_name = await self._classify(message, messages)
@@ -352,8 +361,109 @@ class MosaicHandler:
             logger.error(f"Agent error: {e}")
             return {"response": "I encountered an error while processing your request.", "agent": "error"}
 
+    async def _check_background_task(self, message: str, user_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        """
+        Detect if a message requires a long-running background operation.
+        If so, submit it to the TaskQueue and return an immediate response.
+        Returns None if the message should be processed normally.
+        """
+        msg_lower = message.lower().strip()
+
+        try:
+            from taskqueue.src.mosaic_bridge import submit_background_job
+        except ImportError:
+            # TaskQueue not available — process everything synchronously
+            return None
+
+        # Pattern: "load/process/index [file path]"
+        # Detect RAG document ingestion requests
+        rag_keywords = ["load document", "process pdf", "index file", "ingest"]
+        for keyword in rag_keywords:
+            if keyword in msg_lower:
+                # Extract file path (naive: take the quoted or last segment)
+                import re
+                path_match = re.search(r'["\']([^"\']+)["\']', message) or re.search(r'(\S+\.(pdf|png|jpg|jpeg|txt|docx))(\s|$)', msg_lower)
+                if path_match:
+                    file_path = path_match.group(1)
+                    job_id = await submit_background_job(
+                        job_type="rag_process",
+                        payload={"file_path": file_path},
+                        user_id=user_id or "anonymous",
+                        priority=5,
+                        timeout_seconds=600,
+                    )
+                    return {
+                        "response": f"Processing document in the background (job: {job_id}). I'll have it ready for questions shortly. Check status with: GET /jobs/{job_id}",
+                        "agent": "system",
+                        "job_id": job_id,
+                    }
+
+        # Pattern: "scrape/fetch/read [URL]"
+        scrape_keywords = ["scrape", "fetch url", "read from http", "ingest url", "load url"]
+        for keyword in scrape_keywords:
+            if keyword in msg_lower:
+                import re
+                url_match = re.search(r'(https?://\S+)', message)
+                if url_match:
+                    url = url_match.group(1)
+                    job_id = await submit_background_job(
+                        job_type="web_scrape",
+                        payload={"url": url, "max_length": 20000},
+                        user_id=user_id or "anonymous",
+                        priority=5,
+                        timeout_seconds=60,
+                    )
+                    return {
+                        "response": f"Fetching content from {url} in the background (job: {job_id}). Check status with: GET /jobs/{job_id}",
+                        "agent": "system",
+                        "job_id": job_id,
+                    }
+
+        # Pattern: check job status ("job status", "is my job done", etc.)
+        status_keywords = ["job status", "check job", "is my job", "is it done", "job progress"]
+        for keyword in status_keywords:
+            if keyword in msg_lower:
+                import re
+                from taskqueue.src.mosaic_bridge import get_job_result
+                # Look for a UUID-like pattern
+                uuid_match = re.search(r'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', msg_lower)
+                if uuid_match:
+                    job_id = uuid_match.group(1)
+                    result = await get_job_result(job_id)
+                    status = result.get("status", "unknown")
+                    if status == "completed":
+                        job_result = result.get("result", {})
+                        return {
+                            "response": f"Job {job_id} is complete.\n\nResult: {job_result}",
+                            "agent": "system",
+                        }
+                    elif status == "failed":
+                        error = result.get("error", "Unknown error")
+                        return {
+                            "response": f"Job {job_id} failed: {error}",
+                            "agent": "system",
+                        }
+                    else:
+                        return {
+                            "response": f"Job {job_id} is currently: {status}",
+                            "agent": "system",
+                        }
+
+        return None
+
     async def chat_stream(self, message: str, conversation_id: Optional[int] = None, user_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
-        """Process a chat message with streaming. Stateless."""
+        """Process a chat message with streaming. Stateless.
+        
+        Detects background tasks and yields an immediate response if offloaded.
+        """
+        # Check if this should be a background task
+        bg_result = await self._check_background_task(message, user_id)
+        if bg_result:
+            yield {"type": "agent", "agent": "system"}
+            yield {"type": "token", "content": bg_result["response"]}
+            yield {"type": "done", "full_response": bg_result["response"]}
+            return
+
         messages = self._build_context(conversation_id, message)
 
         agent_name = await self._classify(message, messages)
