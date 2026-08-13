@@ -12,7 +12,6 @@ import os
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
-from datetime import datetime
 
 # Log directory
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")

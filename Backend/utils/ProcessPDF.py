@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from pdf2image import convert_from_path
 import openai
 import base64
-import json
 from typing import List, Dict, Any
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS

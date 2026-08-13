@@ -3,7 +3,14 @@
 All notable changes to the Mosaic project will be documented in this file.
 
 
-## [2.3.1] - 2026-08-14
+## [2.3.3] - 2026-08-14
+
+### Fixed
+- **`user_db` Initialization Bug**: Fixed a critical `NameError` crash occurring during registration, username checks, and all MCP server endpoints by properly instantiating `UserManager` in the main app.
+- **Unused Imports**: Cleaned up the codebase by removing unused `Tuple`, `List`, `json`, and `datetime` imports, and moving inline `re` and `uuid` imports to the top level.
+- **Package Name**: Renamed the frontend package from `"new-build"` to `"mosaic-frontend"` for better project hygiene.
+
+## [2.3.2] - 2026-08-14
 
 ### Changed
 - **MCP Default Transport & Fallbacks**: Changed default transport logic to automatically infer `sse` (for network URLs) or `stdio` (for commands). Also introduced an automatic fallback to standard HTTP POST (`http`) if an SSE stream endpoint returns JSON (meaning it does not support SSE).

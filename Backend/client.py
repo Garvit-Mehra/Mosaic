@@ -11,7 +11,7 @@ import os
 import logging
 import aiohttp
 import datetime
-from typing import List, Dict, Any, Optional, Tuple, AsyncGenerator
+from typing import List, Dict, Any, Optional, AsyncGenerator
 
 from dotenv import load_dotenv
 from langchain_tavily import TavilySearch

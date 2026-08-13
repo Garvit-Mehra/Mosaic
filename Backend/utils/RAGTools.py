@@ -1,4 +1,3 @@
-from typing import List
 from langchain.tools import tool
 from .ProcessPDF import load_document_tool, query_documents_tool, list_documents_tool, clear_documents_tool
 

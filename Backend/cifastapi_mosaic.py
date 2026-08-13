@@ -16,8 +16,10 @@ from utils.auth import (
     verify_token,
 )
 import json
+import re
 import time
 import os
+import uuid
 import ipaddress
 from urllib.parse import urlparse
 
@@ -39,6 +41,7 @@ SERVER_CONFIGS: list = []
 
 # Initialize core services
 conversation_db = ConversationManager()
+user_db = UserManager()
 registry = AgentRegistry()
 handler: Optional[MosaicHandler] = None
 rate_limiter = create_rate_limiter(
@@ -218,7 +221,6 @@ async def register(req: RegisterRequest, request: Request):
 @app.get("/auth/check-username/{username}")
 async def check_username(username: str):
     """Check if a username is available. No auth required."""
-    import re
     if not re.match(r'^[a-zA-Z0-9_]{3,50}$', username):
         return {"available": False, "reason": "Only letters, numbers, and underscores (3-50 chars)."}
 
@@ -365,7 +367,6 @@ async def chat(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
         if user.role != "admin" and getattr(convo, 'user_id', None) != user.username:
             raise HTTPException(status_code=403, detail="Access denied.")
     elif req.transient:
-        import uuid
         conv_id = f"transient-{uuid.uuid4()}"
     else:
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
@@ -413,7 +414,6 @@ async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_us
         if user.role != "admin" and getattr(convo, 'user_id', None) != user.username:
             raise HTTPException(status_code=403, detail="Access denied.")
     elif req.transient:
-        import uuid
         conv_id = f"transient-{uuid.uuid4()}"
     else:
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
