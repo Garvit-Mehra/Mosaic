@@ -235,7 +235,7 @@ def authenticate_user(username: str, password: str) -> Optional[Dict]:
     if not user_provider.verify_password(password, user["password_hash"]):
         return None
 
-    return {"username": user["username"], "role": user["role"]}
+    return {"username": user["username"], "role": user["role"], "verified": user.get("verified", True)}
 
 
 # =============================================================================

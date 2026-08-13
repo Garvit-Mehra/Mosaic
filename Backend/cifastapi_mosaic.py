@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from utils.ConversationDB import ConversationManager
+from utils.UserDB import UserManager
 from utils.logger import get_logger, get_request_logger
 from utils.rate_limiter import create_rate_limiter
 from utils.auth import (
@@ -162,6 +163,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10000)
     conversation_id: Optional[int] = None
+    transient: bool = False
 
 
 class ConversationCreateRequest(BaseModel):
@@ -194,9 +196,6 @@ async def register(req: RegisterRequest, request: Request):
             headers={"Retry-After": "3600"},
         )
 
-    from utils.UserDB import UserManager
-    user_db = UserManager()
-
     try:
         user = user_db.create_user(
             username=req.username,
@@ -223,8 +222,6 @@ async def check_username(username: str):
     if not re.match(r'^[a-zA-Z0-9_]{3,50}$', username):
         return {"available": False, "reason": "Only letters, numbers, and underscores (3-50 chars)."}
 
-    from utils.UserDB import UserManager
-    user_db = UserManager()
     user = user_db.get_user_by_username(username)
     if user:
         return {"available": False, "reason": "Username is taken."}
@@ -265,6 +262,10 @@ async def login(req: LoginRequest, request: Request):
         remaining = rate_limiter.remaining(client_ip)
         logger.warning(f"Failed login: username={req.username} ip={client_ip} remaining={remaining}")
         raise HTTPException(status_code=401, detail="Invalid username or password.")
+        
+    if user.get("verified") is False:
+        logger.warning(f"Login denied: Unverified account {req.username} ip={client_ip}")
+        raise HTTPException(status_code=403, detail="Account not verified. Please check your email.")
 
     access_token = create_access_token(user["username"], user["role"])
     refresh_token = create_refresh_token(user["username"], user["role"])
@@ -328,11 +329,14 @@ async def oauth_login(req: OAuthRequest, request: Request):
     Protected by a shared secret to prevent external abuse.
     """
     # Verify shared secret (set in both Backend/.env and Frontend/.env)
-    if OAUTH_SHARED_SECRET:
-        provided_secret = request.headers.get("X-OAuth-Secret", "")
-        if provided_secret != OAUTH_SHARED_SECRET:
-            logger.warning(f"OAuth endpoint called with invalid secret from {request.client.host if request.client else 'unknown'}")
-            raise HTTPException(status_code=403, detail="Forbidden.")
+    if not OAUTH_SHARED_SECRET:
+        logger.error(f"OAuth login attempted but OAUTH_SHARED_SECRET is not configured. Denying access.")
+        raise HTTPException(status_code=500, detail="OAuth not configured on this server.")
+
+    provided_secret = request.headers.get("X-OAuth-Secret", "")
+    if provided_secret != OAUTH_SHARED_SECRET:
+        logger.warning(f"OAuth endpoint called with invalid secret from {request.client.host if request.client else 'unknown'}")
+        raise HTTPException(status_code=403, detail="Forbidden.")
 
     access_token = create_access_token(req.email, req.role)
     logger.info(f"OAuth login: {req.email} via {req.provider} (role={req.role})")
@@ -360,6 +364,9 @@ async def chat(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
             raise HTTPException(status_code=404, detail="Conversation not found")
         if user.role != "admin" and getattr(convo, 'user_id', None) != user.username:
             raise HTTPException(status_code=403, detail="Access denied.")
+    elif req.transient:
+        import uuid
+        conv_id = f"transient-{uuid.uuid4()}"
     else:
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
         convo = conversation_db.create_conversation(title=title, user_id=user.username)
@@ -376,8 +383,9 @@ async def chat(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
 
     logger.info(f"Response: conv={conv_id} agent={result.get('agent')} len={len(result['response'])}")
 
-    conversation_db.add_message(conv_id, "user", req.message)
-    conversation_db.add_message(conv_id, "assistant", result["response"], agent=result.get("agent"))
+    if not req.transient:
+        conversation_db.add_message(conv_id, "user", req.message)
+        conversation_db.add_message(conv_id, "assistant", result["response"], agent=result.get("agent"))
 
     return {
         "response": result["response"],
@@ -404,6 +412,9 @@ async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_us
             raise HTTPException(status_code=404, detail="Conversation not found")
         if user.role != "admin" and getattr(convo, 'user_id', None) != user.username:
             raise HTTPException(status_code=403, detail="Access denied.")
+    elif req.transient:
+        import uuid
+        conv_id = f"transient-{uuid.uuid4()}"
     else:
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
         convo = conversation_db.create_conversation(title=title, user_id=user.username)
@@ -444,9 +455,10 @@ async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_us
             yield f"data: {json.dumps({'type': 'error', 'content': 'An error occurred.'})}\n\n"
 
         # Persist messages
-        conversation_db.add_message(conv_id, "user", req.message)
-        if full_response:
-            conversation_db.add_message(conv_id, "assistant", full_response, agent=agent_name)
+        if not req.transient:
+            conversation_db.add_message(conv_id, "user", req.message)
+            if full_response:
+                conversation_db.add_message(conv_id, "assistant", full_response, agent=agent_name)
 
         logger.info(f"[stream] Done: conv={conv_id} agent={agent_name} tokens={token_count}")
         yield f"data: {json.dumps({'type': 'done', 'conversation_id': conv_id, 'full_response': full_response, 'agent': agent_name})}\n\n"
@@ -581,8 +593,6 @@ def validate_server_url(url: str):
 @app.get("/servers")
 async def list_servers(user: TokenUser = Depends(get_current_user)):
     """List MCP servers for the current user with live status."""
-    from utils.UserDB import UserManager
-    user_db = UserManager()
     user_configs = user_db.get_user_servers(user.username)
 
     servers = []
@@ -604,9 +614,6 @@ async def list_servers(user: TokenUser = Depends(get_current_user)):
 async def add_server(req: AddServerRequest, user: TokenUser = Depends(get_current_user)):
     """Add a new MCP server for the current user and try to connect."""
     validate_server_url(req.url)
-
-    from utils.UserDB import UserManager
-    user_db = UserManager()
 
     try:
         user_db.add_user_server(user.username, req.name, req.description, req.url, req.transport)
@@ -640,9 +647,6 @@ async def edit_server(server_name: str, req: EditServerRequest, user: TokenUser 
     if req.url:
         validate_server_url(req.url)
 
-    from utils.UserDB import UserManager
-    user_db = UserManager()
-
     if not user_db.update_user_server(user.username, server_name, description=req.description, url=req.url):
         raise HTTPException(status_code=404, detail=f"Server '{server_name}' not found.")
 
@@ -669,9 +673,6 @@ async def edit_server(server_name: str, req: EditServerRequest, user: TokenUser 
 @app.delete("/servers/{server_name}")
 async def remove_server(server_name: str, user: TokenUser = Depends(get_current_user)):
     """Remove an MCP server for the current user."""
-    from utils.UserDB import UserManager
-    user_db = UserManager()
-
     if not user_db.delete_user_server(user.username, server_name):
         raise HTTPException(status_code=404, detail=f"Server '{server_name}' not found.")
 
@@ -706,9 +707,6 @@ async def get_server_tools(server_name: str, user: TokenUser = Depends(get_curre
 @app.post("/servers/refresh")
 async def refresh_servers(user: TokenUser = Depends(get_current_user)):
     """Hot-reload MCP servers for the current user."""
-    from utils.UserDB import UserManager
-    user_db = UserManager()
-
     # Reload user's servers into the registry
     user_configs = user_db.get_user_servers(user.username)
     for config in user_configs:

@@ -184,9 +184,10 @@ export default function ChatPage() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${backendToken}`,
         },
-        body: JSON.stringify({
+          body: JSON.stringify({
           message: `Generate a short title (max 5 words) for a conversation about: "${userMessages}". Reply with ONLY the title, no quotes.`,
           conversation_id: null, // Don't pollute the actual conversation
+          transient: true, // Don't create a new conversation in the backend DB
         }),
       })
         .then((r) => r.json())
