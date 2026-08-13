@@ -9,6 +9,11 @@ venv/
 .vscode/
 .idea/
 
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
 # Logs
 *.log
 logs/
