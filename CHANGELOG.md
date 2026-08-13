@@ -3,6 +3,16 @@
 All notable changes to the Mosaic project will be documented in this file.
 
 
+## [2.3.6] - 2026-08-14
+
+### Added
+- **UI/UX QoL Updates**: Added a comprehensive batch of quality of life frontend features:
+  - Custom ReactMarkdown renderer with a language header and "Copy Code" button for sleek code blocks.
+  - Keyboard shortcuts (`Cmd+K` for new chat, `Cmd+/` for settings).
+  - Instant sidebar refresh when starting a new conversation (eliminates the 10-second polling delay).
+  - Skeleton loading animation while fetching conversation history.
+  - Inline theme script in `layout.tsx` to eliminate light-mode flashing during hydration.
+
 ## [2.3.5] - 2026-08-14
 
 ### Fixed

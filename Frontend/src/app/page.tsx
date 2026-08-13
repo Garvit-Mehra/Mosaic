@@ -141,6 +141,8 @@ export default function ChatPage() {
             } else if (event.type === "done" && event.conversation_id) {
               if (!conversationId) {
                 setConversationId(event.conversation_id);
+                // Dispatch event to instantly refresh the sidebar
+                window.dispatchEvent(new Event("mosaic-sidebar-refresh"));
               }
             }
           } catch {

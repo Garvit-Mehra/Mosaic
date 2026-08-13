@@ -53,7 +53,14 @@ export default function SideBar() {
     if (backendToken) {
       fetchConversations();
       const interval = setInterval(fetchConversations, 10000);
-      return () => clearInterval(interval);
+      
+      const handleRefresh = () => fetchConversations();
+      window.addEventListener("mosaic-sidebar-refresh", handleRefresh);
+
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener("mosaic-sidebar-refresh", handleRefresh);
+      };
     }
   }, [backendToken]);
 

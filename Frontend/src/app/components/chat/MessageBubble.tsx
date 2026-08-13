@@ -15,6 +15,46 @@ interface MessageBubbleProps {
   showRetry?: boolean;
 }
 
+function CodeBlock({ inline, className, children, ...props }: any) {
+  const match = /language-(\w+)/.exec(className || "");
+  const language = match ? match[1] : "";
+  const codeString = String(children).replace(/\n$/, "");
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(codeString);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (!inline && match) {
+    return (
+      <div className="relative flex flex-col rounded-xl overflow-hidden my-3 border border-[var(--hover)] bg-[#0d1117] font-sans">
+        <div className="flex items-center justify-between px-4 py-2 bg-[#161b22] text-[var(--color3)] text-xs border-b border-[var(--hover)]">
+          <span className="font-mono">{language}</span>
+          <button
+            onClick={handleCopy}
+            className="group/copy flex items-center gap-1.5 hover:text-white transition-colors"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+            <span>{copied ? "Copied!" : "Copy"}</span>
+          </button>
+        </div>
+        <div className="p-4 overflow-x-auto text-sm bg-[#0d1117]">
+          <code className={className} {...props}>
+            {children}
+          </code>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <code className={`${className || ""} bg-[var(--hover)] px-1.5 py-0.5 rounded text-xs`} {...props}>
+      {children}
+    </code>
+  );
+}
+
 export default function MessageBubble({
   role,
   content,
@@ -42,8 +82,17 @@ export default function MessageBubble({
       >
         {/* Content */}
         {role === "assistant" && content ? (
-          <div className="prose prose-invert prose-sm max-w-none [&_pre]:bg-[var(--color4)] [&_pre]:border [&_pre]:border-[var(--hover)] [&_pre]:rounded-xl [&_pre]:p-3 [&_pre]:overflow-x-auto [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_table]:text-xs [&_th]:px-2 [&_td]:px-2 [&_a]:text-[var(--color2)]">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+          <div className="prose prose-invert prose-sm max-w-none [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_table]:text-xs [&_th]:px-2 [&_td]:px-2 [&_a]:text-[var(--color2)]">
+            <ReactMarkdown 
+              remarkPlugins={[remarkGfm]} 
+              rehypePlugins={[rehypeHighlight]}
+              components={{
+                pre({ children }) {
+                  return <div className="not-prose">{children}</div>;
+                },
+                code: CodeBlock as any
+              }}
+            >
               {content}
             </ReactMarkdown>
           </div>

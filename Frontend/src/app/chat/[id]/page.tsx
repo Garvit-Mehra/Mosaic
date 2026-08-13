@@ -199,8 +199,25 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
   if (loadingHistory) {
     return (
-      <div className="flex items-center justify-center h-full text-[var(--color3)]">
-        <Loader2 className="w-6 h-6 animate-spin" />
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto px-4 py-6">
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="flex justify-end">
+              <div className="w-1/3 h-10 bg-[var(--hover)] rounded-2xl animate-pulse" />
+            </div>
+            <div className="flex justify-start">
+              <div className="w-2/3 h-20 bg-[var(--hover)] rounded-2xl animate-pulse" />
+            </div>
+            <div className="flex justify-end">
+              <div className="w-1/2 h-16 bg-[var(--hover)] rounded-2xl animate-pulse" />
+            </div>
+          </div>
+        </div>
+        <div className="border-t border-[var(--hover)] px-4 py-4">
+          <div className="max-w-3xl mx-auto">
+            <div className="h-12 bg-[var(--input-bg)] rounded-2xl border border-[var(--hover)] animate-pulse" />
+          </div>
+        </div>
       </div>
     );
   }
