@@ -82,7 +82,7 @@ export default function MessageBubble({
       >
         {/* Content */}
         {role === "assistant" && content ? (
-          <div className="prose prose-invert prose-sm max-w-none [&_code]:text-xs [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_table]:text-xs [&_th]:px-2 [&_td]:px-2 [&_a]:text-[var(--color2)]">
+          <div className="text-sm max-w-none [&_p]:mb-3 [&_p]:mt-1 [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:my-3 [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:my-3 [&_li]:my-1 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:my-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:my-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:my-2 [&_blockquote]:border-l-4 [&_blockquote]:border-[var(--color3)] [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-[var(--color3)] [&_blockquote]:my-3 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_table]:w-full [&_table]:my-3 [&_th]:border [&_th]:border-[var(--hover)] [&_th]:p-2 [&_th]:bg-[var(--hover)] [&_td]:border [&_td]:border-[var(--hover)] [&_td]:p-2 [&_a]:text-[var(--color2)] [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-[var(--color1)] [&_hr]:my-4 [&_hr]:border-[var(--hover)]">
             <ReactMarkdown 
               remarkPlugins={[remarkGfm]} 
               rehypePlugins={[rehypeHighlight]}

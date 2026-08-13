@@ -445,6 +445,7 @@ async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_us
                     token_count += 1
                 elif chunk["type"] == "done":
                     full_response = chunk.get("full_response", "")
+                    chunk["conversation_id"] = conv_id
 
                 yield f"data: {json.dumps(chunk)}\n\n"
 
