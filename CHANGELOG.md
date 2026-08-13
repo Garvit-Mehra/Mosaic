@@ -3,6 +3,13 @@
 All notable changes to the Mosaic project will be documented in this file.
 
 
+## [2.3.5] - 2026-08-14
+
+### Fixed
+- **Frontend Navigation / Redirect Loop**: Fixed an issue where an expired backend token would cause an infinite redirect loop or force the user to the login screen without clearing their session. The `authFetch` utility now cleanly invokes NextAuth's `signOut()` on a 401 response.
+- **Login Page Access**: Updated Next.js `middleware.ts` to actively redirect authenticated users away from `/login` back to the home page, preventing them from seeing the login form if they are already signed in.
+- **NextAuth Edge Runtime**: Added explicit `trustHost: true` and `secret` configuration to `auth.ts` to prevent sporadic session drops when the middleware runs on Edge environments or behind strict proxies.
+
 ## [2.3.4] - 2026-08-14
 
 ### Changed

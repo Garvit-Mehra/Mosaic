@@ -6,7 +6,14 @@ export default auth((req) => {
 
   // Public paths — no auth needed
   const publicPaths = ["/login", "/api/auth"];
-  if (publicPaths.some((p) => pathname.startsWith(p))) {
+  const isPublicPath = publicPaths.some((p) => pathname.startsWith(p));
+
+  // If user is logged in and tries to go to login, redirect to home
+  if (isPublicPath && pathname.startsWith("/login") && req.auth) {
+    return NextResponse.redirect(new URL("/", req.nextUrl.origin));
+  }
+
+  if (isPublicPath) {
     return NextResponse.next();
   }
 

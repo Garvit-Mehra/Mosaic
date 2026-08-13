@@ -36,7 +36,10 @@ export async function authFetch(
   const res = await fetch(url, { ...options, headers });
 
   if (res.status === 401) {
-    window.location.href = "/login";
+    if (typeof window !== "undefined") {
+      const { signOut } = await import("next-auth/react");
+      signOut({ callbackUrl: "/login" });
+    }
   }
 
   return res;

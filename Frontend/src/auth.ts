@@ -31,6 +31,8 @@ const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:8080";
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  secret: process.env.AUTH_SECRET,
+  trustHost: true,
   providers: [
     // --- Google ---
     ...(process.env.GOOGLE_CLIENT_ID
