@@ -153,14 +153,14 @@ class TestValidateExecuteAt:
 
     def test_naive_past_time_is_invalid(self):
         """Naive datetime (no timezone) treated as UTC and validated."""
-        past = datetime.utcnow() - timedelta(hours=1)
+        past = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1)
         with pytest.raises(ValidationError) as exc_info:
             validate_execute_at(past)
         assert exc_info.value.status_code == 400
 
     def test_naive_future_time_is_valid(self):
         """Naive datetime (no timezone) treated as UTC and validated."""
-        future = datetime.utcnow() + timedelta(hours=1)
+        future = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
         validate_execute_at(future)  # Should not raise
 
 

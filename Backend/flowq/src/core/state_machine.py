@@ -5,7 +5,7 @@ functions to validate and apply transitions. This module is pure logic
 with no database dependencies.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.models.enums import JobStatus
 
@@ -88,4 +88,4 @@ def apply_transition(job, target_status: JobStatus) -> None:
 
     # Apply the transition atomically (status + timestamp)
     job.status = target_status
-    job.updated_at = datetime.utcnow()
+    job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)

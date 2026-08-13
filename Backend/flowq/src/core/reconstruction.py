@@ -215,7 +215,7 @@ class StateReconstructor:
             Number of jobs added to the scheduled queue.
         """
         count = 0
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         async with self._session_factory() as session:
             stmt = select(Job).where(
@@ -260,7 +260,7 @@ class StateReconstructor:
             Number of jobs recovered.
         """
         count = 0
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         async with self._session_factory() as session:
             async with session.begin():

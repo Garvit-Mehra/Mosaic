@@ -1,28 +1,66 @@
 #!/usr/bin/env python3
-__import__('sys').path.append('..')
-from client import Mosaic
+import asyncio
+import os
+import sys
 
-# Server Configurations
+# Ensure the Backend directory is importable if running from examples
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from client import AgentRegistry, MosaicHandler
+from utils.ConversationDB import ConversationManager
+
+# Example server configurations
 SERVER_CONFIGS = [
     {
-        "name": "database_server",
-        "description": "A server that manages a SQLite database with full CRUD operations.",
-        "url": "http://localhost:8000/sse"
+        "name": "example_server",
+        "description": "An example MCP server.",
+        "url": "http://localhost:8000/sse",
+        "transport": "sse"
     },
 ]
 
-MODEL_NAME = "llama3.2"
+async def main():
+    print("Initializing Mosaic...")
+    
+    # 1. Initialize databases
+    conversation_db = ConversationManager()
+    
+    # 2. Initialize Agent Registry
+    registry = AgentRegistry()
+    # Optionally load MCP servers and enable/disable web search
+    await registry.initialize(SERVER_CONFIGS, web_search=False)
+    
+    # 3. Create Handler
+    handler = MosaicHandler(registry, conversation_db)
+    
+    print("\nMosaic initialized. Type 'quit' to exit.")
+    conversation_id = None
+    
+    while True:
+        try:
+            user_input = input("\nYou: ")
+            if user_input.lower() in ['quit', 'exit']:
+                break
+                
+            print("\nMosaic: ", end="", flush=True)
+            
+            # Use streaming chat
+            async for chunk in handler.chat_stream(
+                user_input, 
+                conversation_id=conversation_id,
+                user_id="template_user"
+            ):
+                if chunk["type"] == "token":
+                    print(chunk["content"], end="", flush=True)
+                elif chunk["type"] == "done":
+                    conversation_id = chunk.get("conversation_id", conversation_id)
+                    print(f"\n[Agent used: {chunk.get('agent', 'unknown')}]")
+                    
+        except KeyboardInterrupt:
+            print("\nExiting...")
+            break
+        except Exception as e:
+            print(f"\nError: {e}")
 
-# Main Function
-def main():
-    """Main function to run the Mosaic client."""
-    mosaic = Mosaic.create(
-        server_configs=SERVER_CONFIGS,
-        model_config=MODEL_NAME,
-        web_search=True,
-    )
-    mosaic.run()
-
-# Main Execution
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

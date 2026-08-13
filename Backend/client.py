@@ -36,7 +36,7 @@ MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "10"))
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 if not TAVILY_API_KEY:
-    raise ValueError("TAVILY_API_KEY not set in environment variables.")
+    logger.warning("TAVILY_API_KEY not set in environment variables. Web search tools will not be available.")
 
 
 # =============================================================================

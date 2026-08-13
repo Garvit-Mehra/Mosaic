@@ -3,6 +3,24 @@
 All notable changes to the Mosaic project will be documented in this file.
 
 
+## [2.3.4] - 2026-08-14
+
+### Changed
+- **Secrets & Security**: Rotated exposed secrets and set safe placeholders in `.env` and `credentials.json`.
+- **SSRF Protection**: Re-enabled SSRF protection to block private IP addresses, added `ALLOW_LOCAL_MCP` environment variable for local dev support.
+- **Tavily Crash**: Replaced the hard crash with a warning when `TAVILY_API_KEY` is missing in `client.py`.
+- **Deprecations**: Migrated `datetime.utcnow()` to timezone-aware standard `datetime.now(timezone.utc)` across the codebase.
+- **FlowQ Config**: Fixed pydantic settings validation by allowing extra fields from the environment config.
+
+### Added
+- **Testing**: Configured basic Playwright E2E testing in the frontend and added initial tests.
+- **Testing**: Added backend API tests for health check and auth logic using FastAPI TestClient.
+- **Testing**: Reinstated 550+ FlowQ tests by fixing missing dependencies (`aiosqlite`, `lupa`, `greenlet`, etc.).
+
+### Fixed
+- **SSE Streaming**: Removed duplicate `done` events being emitted by the backend stream wrapper.
+- **Mosaic Template**: Rewrote `examples/mosaic_template.py` to correctly instantiate `MosaicHandler` and `AgentRegistry`.
+
 ## [2.3.3] - 2026-08-14
 
 ### Fixed

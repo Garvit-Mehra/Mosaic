@@ -109,7 +109,7 @@ class TestSubmitJob:
         self, coordinator, mock_redis, mock_priority_queue, registry
     ):
         """Submitting with execute_at creates a SCHEDULED job."""
-        future_time = datetime.utcnow() + timedelta(hours=1)
+        future_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
 
         with patch("src.core.coordinator.validate_job_submission"):
             result = await coordinator.submit_job(
@@ -310,7 +310,7 @@ class TestGetJob:
                     max_retries=5,
                     retry_count=1,
                     worker_id=uuid.uuid4(),
-                    started_at=datetime.utcnow(),
+                    started_at=datetime.now(timezone.utc).replace(tzinfo=None),
                 )
                 session.add(job)
                 await session.flush()

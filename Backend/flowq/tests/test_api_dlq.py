@@ -8,7 +8,7 @@ Validates requirements:
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -44,7 +44,7 @@ async def client(app_with_mock):
 @pytest.fixture
 def sample_dlq_jobs():
     """Generate sample DLQ job data."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     return [
         {
             "id": uuid.uuid4(),

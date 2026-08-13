@@ -138,7 +138,7 @@ async def view_events(request: ViewEventsRequest) -> Dict[str, Any]:
     try:
         service = get_calendar_service()
         calendar_id = choose_calendar_id("", request.calendar_hint)
-        now = request.time_min or datetime.datetime.utcnow().isoformat() + 'Z'
+        now = request.time_min or datetime.datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + 'Z'
         events_result = service.events().list(
             calendarId=calendar_id,
             timeMin=now,
@@ -224,7 +224,7 @@ async def find_events_by_query(request: FindEventsRequest) -> Dict[str, Any]:
     try:
         service = get_calendar_service()
         calendar_id = choose_calendar_id(request.query, request.calendar_hint)
-        now = request.time_min or datetime.datetime.utcnow().isoformat() + 'Z'
+        now = request.time_min or datetime.datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + 'Z'
         events_result = service.events().list(
             calendarId=calendar_id,
             timeMin=now,

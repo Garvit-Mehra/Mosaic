@@ -8,7 +8,7 @@ Tests cover:
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
@@ -187,7 +187,7 @@ class TestWorkerPgFailureHandling:
     def test_pending_job_result_dataclass(self):
         """PendingJobResult holds all required fields."""
         job_id = uuid4()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         pending = PendingJobResult(
             job_id=job_id,
             status=JobStatus.COMPLETED,
@@ -344,8 +344,8 @@ class TestWorkerPgFailureHandling:
             job_id=job_id,
             status=JobStatus.COMPLETED,
             result={"output": "done"},
-            started_at=datetime.utcnow(),
-            completed_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
             worker_id=worker.worker_id,
             attempt_number=1,
         )
@@ -446,8 +446,8 @@ class TestWorkerPgFailureHandling:
                 job_id=job_id_1,
                 status=JobStatus.COMPLETED,
                 result={"a": 1},
-                started_at=datetime.utcnow(),
-                completed_at=datetime.utcnow(),
+                started_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
                 worker_id=worker.worker_id,
                 attempt_number=1,
             ),
@@ -455,8 +455,8 @@ class TestWorkerPgFailureHandling:
                 job_id=job_id_2,
                 status=JobStatus.COMPLETED,
                 result={"b": 2},
-                started_at=datetime.utcnow(),
-                completed_at=datetime.utcnow(),
+                started_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
                 worker_id=worker.worker_id,
                 attempt_number=1,
             ),

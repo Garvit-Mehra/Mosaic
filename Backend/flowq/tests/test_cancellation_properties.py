@@ -14,7 +14,7 @@ Property 12: Cancellation Idempotence
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -56,8 +56,8 @@ def _make_job(status: JobStatus, job_id: uuid.UUID = None) -> MagicMock:
     job.completed_at = None
     job.result = None
     job.error = None
-    job.created_at = datetime.utcnow()
-    job.updated_at = datetime.utcnow()
+    job.created_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     return job
 
 

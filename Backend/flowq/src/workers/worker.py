@@ -23,7 +23,7 @@ import signal
 import socket
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
@@ -133,7 +133,7 @@ class Worker:
         Creates a Worker record with status ACTIVE, current hostname,
         PID, and sets last_heartbeat to current time.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         worker_record = WorkerModel(
             id=self.worker_id,
             hostname=socket.gethostname(),
@@ -401,14 +401,14 @@ class Worker:
                         # Transition to RUNNING first (needed for failure handler)
                         apply_transition(job, JobStatus.RUNNING)
                         job.worker_id = self.worker_id
-                        job.started_at = datetime.utcnow()
+                        job.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
                         # Now handle as failure
                         await handle_job_failure(job, error_msg, session, self._redis)
                 self.jobs_failed += 1
                 return
 
             # Step 4: Update job to RUNNING (Req 6.3)
-            started_at = datetime.utcnow()
+            started_at = datetime.now(timezone.utc).replace(tzinfo=None)
             async with self._session_factory() as session:
                 async with session.begin():
                     stmt = select(Job).where(Job.id == job_id)
@@ -429,7 +429,7 @@ class Worker:
 
                 # Step 6a: Success (Req 6.4)
                 # If PG fails here, hold result in memory (Req 15.3)
-                completed_at = datetime.utcnow()
+                completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 try:
                     async with self._session_factory() as session:
                         async with session.begin():
@@ -512,7 +512,7 @@ class Worker:
                             status=JobStatus.FAILED,
                             error=f"Job exceeded timeout of {job.timeout_seconds} seconds",
                             started_at=started_at,
-                            completed_at=datetime.utcnow(),
+                            completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
                             worker_id=self.worker_id,
                             attempt_number=job.retry_count + 1 if job else 1,
                         )
@@ -547,7 +547,7 @@ class Worker:
                             status=JobStatus.FAILED,
                             error=str(e),
                             started_at=started_at,
-                            completed_at=datetime.utcnow(),
+                            completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
                             worker_id=self.worker_id,
                             attempt_number=job.retry_count + 1 if job else 1,
                         )
@@ -567,7 +567,7 @@ class Worker:
         Sets heartbeat:{worker_id} with current timestamp and TTL of 15s.
         """
         heartbeat_key = f"heartbeat:{self.worker_id}"
-        timestamp = str(int(datetime.utcnow().timestamp()))
+        timestamp = str(int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp()))
         try:
             await self._redis.set(heartbeat_key, timestamp, ex=HEARTBEAT_TTL)
         except Exception as e:

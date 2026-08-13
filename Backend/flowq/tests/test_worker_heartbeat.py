@@ -11,7 +11,7 @@ import asyncio
 import logging
 import os
 import socket
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -121,9 +121,9 @@ class TestSendHeartbeat:
 
     async def test_heartbeat_value_is_utc_timestamp(self, worker, mock_redis):
         """Heartbeat value should be a UTC timestamp (Req 7.2)."""
-        before = int(datetime.utcnow().timestamp())
+        before = int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())
         await worker.send_heartbeat()
-        after = int(datetime.utcnow().timestamp())
+        after = int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp())
 
         call_args = mock_redis.set.call_args
         value = call_args[0][1] if len(call_args[0]) > 1 else call_args.kwargs.get("value")
@@ -270,9 +270,9 @@ class TestWorkerRegistration:
 
     async def test_register_sets_last_heartbeat(self, worker, mock_session_factory):
         """Worker should have last_heartbeat set to current time."""
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc).replace(tzinfo=None)
         await worker.register()
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc).replace(tzinfo=None)
 
         session = mock_session_factory.return_value
         worker_record = session.add.call_args[0][0]
@@ -280,9 +280,9 @@ class TestWorkerRegistration:
 
     async def test_register_sets_started_at(self, worker, mock_session_factory):
         """Worker should have started_at set to current time."""
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc).replace(tzinfo=None)
         await worker.register()
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc).replace(tzinfo=None)
 
         session = mock_session_factory.return_value
         worker_record = session.add.call_args[0][0]

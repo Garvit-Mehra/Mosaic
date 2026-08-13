@@ -1,6 +1,6 @@
 """Application configuration using pydantic-settings."""
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -42,11 +42,12 @@ class Settings(BaseSettings):
     # PostgreSQL failure handling
     postgres_connect_timeout: float = 5.0
 
-    model_config = {
-        "env_prefix": "JQ_",
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
-    }
+    model_config = SettingsConfigDict(
+        env_prefix="JQ_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
 
 
 # Global settings instance

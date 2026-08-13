@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, F
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.pool import QueuePool, StaticPool
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
 from dotenv import load_dotenv
@@ -140,7 +140,7 @@ class ConversationManager:
 
             conversation = session.query(Conversation).filter(Conversation.id == conversation_id).first()
             if conversation:
-                conversation.updated_at = datetime.utcnow()
+                conversation.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
             session.flush()
             session.refresh(message)
@@ -200,7 +200,7 @@ class ConversationManager:
             conversation = session.query(Conversation).filter(Conversation.id == conversation_id).first()
             if conversation:
                 conversation.title = new_title
-                conversation.updated_at = datetime.utcnow()
+                conversation.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 return True
             return False
 

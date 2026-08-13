@@ -461,7 +461,7 @@ async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_us
                 conversation_db.add_message(conv_id, "assistant", full_response, agent=agent_name)
 
         logger.info(f"[stream] Done: conv={conv_id} agent={agent_name} tokens={token_count}")
-        yield f"data: {json.dumps({'type': 'done', 'conversation_id': conv_id, 'full_response': full_response, 'agent': agent_name})}\n\n"
+        # The stream already yielded the done event from handler.chat_stream
 
     return StreamingResponse(
         event_generator(),
@@ -570,17 +570,18 @@ def validate_server_url(url: str):
     # disabled so that local development servers can be added.
     
     # Resolve and check IP ranges
+    allow_local = os.getenv("ALLOW_LOCAL_MCP", "false").lower() == "true"
     try:
         import socket
         resolved = socket.getaddrinfo(hostname, None)
         for _, _, _, _, addr in resolved:
             ip = ipaddress.ip_address(addr[0])
             if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-                # raise HTTPException(
-                #     status_code=400,
-                #     detail="Server URL resolves to a private/internal IP address. This is not allowed."
-                # )
-                pass
+                if not allow_local:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Server URL resolves to a private/internal IP address. This is not allowed in production."
+                    )
     except socket.gaierror:
         # Can't resolve — allow it (might be a hostname only reachable from certain networks)
         pass

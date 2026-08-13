@@ -100,8 +100,8 @@ async def _create_scheduled_job(session_factory, job_id=None, priority=5, execut
                 retry_count=0,
                 retry_backoff_base=2.0,
                 timeout_seconds=300,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
             )
             session.add(job)
     return job_id
@@ -125,8 +125,8 @@ async def _create_retry_job(session_factory, job_id=None, priority=3, retry_coun
                 retry_count=retry_count,
                 retry_backoff_base=2.0,
                 timeout_seconds=300,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
             )
             session.add(job)
     return job_id

@@ -8,7 +8,7 @@ Uses Hypothesis to generate random sets of jobs with various statuses and verify
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -128,7 +128,7 @@ async def _create_coordinator_with_jobs(job_specs):
     inserted_jobs = []
     async with session_factory() as session:
         async with session.begin():
-            base_time = datetime.utcnow()
+            base_time = datetime.now(timezone.utc).replace(tzinfo=None)
             for i, spec in enumerate(job_specs):
                 job = Job(
                     id=uuid.uuid4(),

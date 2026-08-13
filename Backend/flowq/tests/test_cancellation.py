@@ -1,7 +1,7 @@
 """Unit tests for job cancellation logic (Requirements 3.1-3.4)."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,8 +29,8 @@ def _make_job(status: JobStatus, job_id: uuid.UUID = None) -> Job:
     job.completed_at = None
     job.result = None
     job.error = None
-    job.created_at = datetime.utcnow()
-    job.updated_at = datetime.utcnow()
+    job.created_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     return job
 
 

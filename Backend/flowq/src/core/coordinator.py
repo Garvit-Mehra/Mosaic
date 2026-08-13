@@ -97,7 +97,7 @@ class JobCoordinator:
         async with self._session_factory() as session:
             async with session.begin():
                 # Step 2: Create job in PostgreSQL with PENDING status
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
                 job = Job(
                     job_type=job_type,
                     payload=payload,

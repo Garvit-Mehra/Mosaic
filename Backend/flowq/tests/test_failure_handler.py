@@ -2,7 +2,7 @@
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -83,7 +83,7 @@ class TestHandleJobFailureRetry:
         job_id_str = str(job.id)
         assert job_id_str in score_mapping
         score = score_mapping[job_id_str]
-        now_ms = int(datetime.utcnow().timestamp() * 1000)
+        now_ms = int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp() * 1000)
         assert score > now_ms  # Retry is in the future
 
     @pytest.mark.asyncio
@@ -182,11 +182,11 @@ class TestHandleJobFailureDLQ:
     async def test_dlq_score_is_current_timestamp(self, session, redis_client):
         """Req 10.1: DLQ score is failure timestamp in milliseconds."""
         job = FakeJob(retry_count=3, max_retries=3)
-        before = int(datetime.utcnow().timestamp() * 1000)
+        before = int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp() * 1000)
 
         await handle_job_failure(job, "final failure", session, redis_client)
 
-        after = int(datetime.utcnow().timestamp() * 1000)
+        after = int(datetime.now(timezone.utc).replace(tzinfo=None).timestamp() * 1000)
         score_mapping = redis_client.zadd.call_args[0][1]
         score = score_mapping[str(job.id)]
         assert before <= score <= after
@@ -296,8 +296,8 @@ class TestRecordExecution:
         """Records an execution with all required fields."""
         job_id = uuid.uuid4()
         worker_id = uuid.uuid4()
-        started = datetime.utcnow() - timedelta(seconds=5)
-        completed = datetime.utcnow()
+        started = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=5)
+        completed = datetime.now(timezone.utc).replace(tzinfo=None)
 
         await _record_execution(
             session=session,
@@ -349,8 +349,8 @@ class TestRecordExecution:
             worker_id=uuid.uuid4(),
             attempt_number=1,
             status="COMPLETED",
-            started_at=datetime.utcnow(),
-            completed_at=datetime.utcnow(),
+            started_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            completed_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
 
         execution = session.add.call_args[0][0]

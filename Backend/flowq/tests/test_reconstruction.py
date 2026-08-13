@@ -267,7 +267,7 @@ class TestRebuildScheduledQueue:
 
     async def test_rebuilds_scheduled_jobs(self, mock_redis, mock_priority_queue):
         """Should add SCHEDULED jobs with future execute_at to schedule set."""
-        future_time = datetime.utcnow() + timedelta(hours=1)
+        future_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
         job1 = FakeJob(
             status=JobStatus.SCHEDULED,
             execute_at=future_time,

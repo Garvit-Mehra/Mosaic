@@ -10,7 +10,7 @@ Uses Hypothesis to verify:
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock
 
@@ -121,8 +121,8 @@ class TestRetryBound:
             # Reset job to RUNNING state to simulate worker picking it up
             job.status = JobStatus.RUNNING
             job.worker_id = uuid.uuid4()
-            job.started_at = datetime.utcnow()
-            job.updated_at = datetime.utcnow()
+            job.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
             await handle_job_failure(job, f"error #{i+1}", session, redis_client)
 
@@ -277,8 +277,8 @@ class TestDLQCompleteness:
             # Reset to RUNNING for next failure
             job.status = JobStatus.RUNNING
             job.worker_id = uuid.uuid4()
-            job.started_at = datetime.utcnow()
-            job.updated_at = datetime.utcnow()
+            job.started_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            job.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
             await handle_job_failure(job, f"failure #{i+1}", session, redis_client)
 

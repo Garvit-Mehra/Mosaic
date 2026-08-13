@@ -6,7 +6,7 @@ Implements the failure path for jobs that error during execution:
 - Always records execution history and clears worker assignment
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from uuid import UUID
 
@@ -40,7 +40,7 @@ async def handle_job_failure(
         session: Active async SQLAlchemy session for persistence.
         redis_client: Async Redis client for queue operations.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     # Capture execution details before state changes
     worker_id = job.worker_id

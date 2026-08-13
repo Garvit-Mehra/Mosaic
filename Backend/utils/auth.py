@@ -22,7 +22,7 @@ import os
 import time
 import secrets
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict
 
 import bcrypt
@@ -184,8 +184,8 @@ def create_access_token(username: str, role: str) -> str:
         "sub": username,
         "role": role,
         "type": "access",
-        "exp": datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS),
-        "iat": datetime.utcnow(),
+        "exp": datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS),
+        "iat": datetime.now(timezone.utc).replace(tzinfo=None),
         "jti": secrets.token_hex(16),  # unique token ID
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=ALGORITHM)
@@ -197,8 +197,8 @@ def create_refresh_token(username: str, role: str) -> str:
         "sub": username,
         "role": role,
         "type": "refresh",
-        "exp": datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
-        "iat": datetime.utcnow(),
+        "exp": datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        "iat": datetime.now(timezone.utc).replace(tzinfo=None),
         "jti": secrets.token_hex(16),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=ALGORITHM)
