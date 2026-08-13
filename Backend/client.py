@@ -151,7 +151,8 @@ class AgentRegistry:
                         "5. Do NOT say 'According to search results' or 'Based on the results' — just answer directly.\n"
                         "6. Include specific facts, numbers, and dates from the results.\n"
                         "7. Keep it concise — 2-4 sentences unless more detail is needed.\n"
-                        "8. If the search returns nothing useful, say so honestly."
+                        "8. If the search returns nothing useful, say so honestly.\n"
+                        "9. If a search tool fails, encounters an error, or needs to be retried, DO NOT output any apology or explanation (e.g. do NOT say 'It seems that there was an issue...'). Simply call the tool again immediately and silently."
                     ),
                     checkpointer=MemorySaver()
                 ),
