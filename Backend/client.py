@@ -43,54 +43,50 @@ if not TAVILY_API_KEY:
 # MCP Server Utilities
 # =============================================================================
 
-class MCPClientManager:
-    def __init__(self, server_configs):
-        self.server_dict = {}
-        for config in server_configs:
-            entry = {k: v for k, v in config.items() if k in ("url", "transport", "command", "args")}
-            if "transport" not in entry:
-                entry["transport"] = "streamable_http"  # Modern default
-            self.server_dict[config["name"]] = entry
-        self.client = MultiServerMCPClient(self.server_dict)
-
-    def get_client(self):
-        return self.client
 
 
-async def is_server_active(url: str) -> bool:
+async def is_server_active(url: Optional[str]) -> bool:
+    if not url:
+        return True  # stdio servers (no url) are assumed active, will fail at connection if not
     try:
         # Skip SSL verification for external servers (some have cert issues on macOS)
         connector = aiohttp.TCPConnector(ssl=False)
         async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                return resp.status < 400
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                # Any response means the server is reachable and listening
+                return True
     except Exception:
         return False
 
 
-async def get_mcp_tools(client_manager: MCPClientManager, server_name: str):
-    client = client_manager.get_client()
-    if not client:
-        return []
+async def get_mcp_tools(server_name: str, config: Dict[str, Any]):
+    default_transport = "sse" if config.get("url") else "stdio"
+    transport = config.get("transport") or default_transport
+    
+    client_config = {k: v for k, v in config.items() if k in ("url", "command", "args") and v is not None}
+    client_config["transport"] = transport
+
     try:
+        client = MultiServerMCPClient({server_name: client_config})
         tools = await client.get_tools(server_name=server_name)
-        logger.info(f"Loaded {len(tools)} tools for {server_name}")
+        config["transport"] = transport  # Store working transport
+        logger.info(f"Loaded {len(tools)} tools for {server_name} via {transport}")
         return tools
     except Exception as e:
-        # If streamable_http failed, try SSE as fallback
-        logger.warning(f"Primary transport failed for {server_name}: {e}. Trying SSE fallback...")
-        try:
-            config = client_manager.server_dict[server_name]
-            fallback_client = MultiServerMCPClient({
-                server_name: {**config, "transport": "sse"}
-            })
-            tools = await fallback_client.get_tools(server_name=server_name)
-            # Update the manager's config to remember the working transport
-            client_manager.server_dict[server_name]["transport"] = "sse"
-            logger.info(f"Loaded {len(tools)} tools for {server_name} via SSE fallback")
-            return tools
-        except Exception as e2:
-            logger.error(f"Both transports failed for {server_name}: {e2}")
+        if transport == "sse":
+            logger.warning(f"Transport sse failed for {server_name}: {e}. Trying http fallback...")
+            try:
+                client_config["transport"] = "http"
+                client = MultiServerMCPClient({server_name: client_config})
+                tools = await client.get_tools(server_name=server_name)
+                config["transport"] = "http"  # Store working transport
+                logger.info(f"Loaded {len(tools)} tools for {server_name} via http fallback")
+                return tools
+            except Exception as e2:
+                logger.error(f"Both sse and http transports failed for {server_name}: {e2}")
+                return []
+        else:
+            logger.error(f"Transport {transport} failed for {server_name}: {e}")
             return []
 
 
@@ -144,12 +140,18 @@ class AgentRegistry:
                 "description": "ONLY for live/real-time info: current news, weather, stock prices, sports scores.",
                 "agent": create_react_agent(
                     get_agent_model(),
-                    tools=[TavilySearch(api_key=TAVILY_API_KEY, max_results=2)],
+                    tools=[TavilySearch(api_key=TAVILY_API_KEY, max_results=3)],
                     prompt=(
-                        "You are Mosaic's web search agent. "
-                        "Use the search tool ONLY when the user needs live/current information. "
-                        "After searching, summarize the results in plain text. "
-                        "Never output raw JSON. Be brief and clear."
+                        "You are Mosaic, a helpful AI assistant with access to web search.\n"
+                        "When you receive a query:\n"
+                        "1. Use the search tool to find current information.\n"
+                        "2. Read the search results carefully.\n"
+                        "3. Write a clear, natural language answer as if explaining to a person.\n"
+                        "4. Do NOT dump raw search results, JSON, or URLs at the user.\n"
+                        "5. Do NOT say 'According to search results' or 'Based on the results' — just answer directly.\n"
+                        "6. Include specific facts, numbers, and dates from the results.\n"
+                        "7. Keep it concise — 2-4 sentences unless more detail is needed.\n"
+                        "8. If the search returns nothing useful, say so honestly."
                     ),
                     checkpointer=MemorySaver()
                 ),
@@ -166,13 +168,13 @@ class AgentRegistry:
                     self.inactive_servers.append(config["name"])
 
             if active_configs:
-                client_manager = MCPClientManager(active_configs)
                 for config in active_configs:
                     try:
-                        mcp_tools = await get_mcp_tools(client_manager, config["name"])
+                        mcp_tools = await get_mcp_tools(config["name"], config)
                         agents.append({
                             "name": config["name"],
                             "description": config["description"],
+                            "tools": mcp_tools,
                             "agent": create_react_agent(
                                 get_agent_model(),
                                 tools=mcp_tools,
@@ -219,14 +221,18 @@ class AgentRegistry:
         ]
 
         if servers_to_check:
-            client_manager = MCPClientManager(servers_to_check)
             for config in servers_to_check:
-                if await is_server_active(config["url"]):
+                if await is_server_active(config.get("url")):
                     try:
-                        mcp_tools = await get_mcp_tools(client_manager, config["name"])
+                        mcp_tools = await get_mcp_tools(config["name"], config)
+                        
+                        # Remove existing agent with the same name if it exists to avoid duplicates
+                        self.agents = [a for a in self.agents if a["name"] != config["name"]]
+                        
                         self.agents.append({
                             "name": config["name"],
                             "description": config["description"],
+                            "tools": mcp_tools,
                             "agent": create_react_agent(
                                 get_agent_model(),
                                 tools=mcp_tools,
@@ -249,7 +255,7 @@ class AgentRegistry:
             if agent["name"] in ("general", "web", "rag"):
                 continue
             config = next((c for c in self.server_configs if c["name"] == agent["name"]), None)
-            if config and not await is_server_active(config["url"]):
+            if config and not await is_server_active(config.get("url")):
                 self.agents.remove(agent)
                 if agent["name"] not in self.inactive_servers:
                     self.inactive_servers.append(agent["name"])
@@ -307,22 +313,45 @@ class MosaicHandler:
 
     async def _classify(self, user_input: str, history: List[Dict[str, str]]) -> str:
         """Route the query to the correct agent."""
-        prompt = "You are a router. Pick ONE agent name for the user's query.\n\n"
-        prompt += "Rules:\n"
-        prompt += "1. Use 'web' ONLY for live/current info (news, weather, scores).\n"
-        prompt += "2. Use 'rag' ONLY when user mentions a loaded document/PDF/file.\n"
-        prompt += "3. Use 'general' for ALL other queries.\n"
-        prompt += "4. When in doubt, use 'general'.\n\n"
-        prompt += "Agents:\n"
-        for agent in self.registry.agents:
-            prompt += f"- {agent['name']}: {agent['description']}\n"
-        prompt += f"\nUser query: {user_input}\n\n"
-        prompt += "Reply with ONLY the agent name."
+        # Build agent list — only include non-general agents with descriptions
+        mcp_agents = [a for a in self.registry.agents if a["name"] not in ("general", "web", "rag")]
+
+        prompt = (
+            "You are a request router. Output ONLY a single agent name — nothing else.\n\n"
+            "ROUTING RULES (apply in order):\n"
+            "1. Output 'web' ONLY if the query explicitly requires LIVE or REAL-TIME data that changes daily: "
+            "current news headlines, live sports scores, today's stock prices, current weather. "
+            "Do NOT use 'web' for general knowledge, definitions, explanations, history, or anything that doesn't change.\n"
+            "2. Output 'rag' ONLY if the user explicitly says 'my document', 'the PDF', 'loaded file', "
+            "or directly references content they uploaded. Do NOT use 'rag' for general questions.\n"
+        )
+
+        if mcp_agents:
+            prompt += "3. Output an MCP agent name ONLY if the query explicitly requires a tool from that server:\n"
+            for a in mcp_agents:
+                prompt += f"   - '{a['name']}': {a['description']}\n"
+            prompt += "4. For EVERYTHING ELSE — coding, math, writing, explanations, opinions, creative tasks, follow-up questions — output 'general'.\n"
+        else:
+            prompt += "3. For EVERYTHING ELSE — output 'general'.\n"
+
+        prompt += (
+            "\nExamples:\n"
+            "- 'what is a binary tree?' → general\n"
+            "- 'write me a python function' → general\n"
+            "- 'what happened in the news today?' → web\n"
+            "- 'what is the current price of bitcoin?' → web\n"
+            "- 'what does my report say about revenue?' → rag\n"
+            "- 'hello' → general\n"
+            "- 'explain recursion' → general\n"
+            "\n"
+            f"User query: {user_input}\n\n"
+            "Output ONLY the agent name. No explanation, no punctuation."
+        )
 
         result = await self.classifier.ainvoke(prompt)
-        name = result.content.strip().split()[0].lower()
+        name = result.content.strip().split()[0].lower().strip(".,!?")
 
-        # Validate
+        # Validate — default to general if unrecognised
         if not self.registry.get_agent(name):
             if name in self.registry.inactive_servers:
                 return "__inactive__:" + name

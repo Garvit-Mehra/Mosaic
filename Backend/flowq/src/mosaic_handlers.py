@@ -43,29 +43,11 @@ async def handle_mcp_tool_call(payload: Dict[str, Any]) -> Dict[str, Any]:
     logger.info(f"MCP tool call: {server_name}/{tool_name}")
 
     try:
-        from langchain_mcp_adapters.client import MultiServerMCPClient
-
-        client = MultiServerMCPClient({
-            server_name: {
-                "url": server_url,
-                "transport": "streamable_http",
-            }
-        })
-
-        # Get tools and find the one we need
-        tools = await client.get_tools(server_name=server_name)
+        from client import get_mcp_tools
+        
+        config = {"url": server_url}
+        tools = await get_mcp_tools(server_name, config)
         target_tool = next((t for t in tools if t.name == tool_name), None)
-
-        if not target_tool:
-            # Try SSE fallback
-            client = MultiServerMCPClient({
-                server_name: {
-                    "url": server_url,
-                    "transport": "sse",
-                }
-            })
-            tools = await client.get_tools(server_name=server_name)
-            target_tool = next((t for t in tools if t.name == tool_name), None)
 
         if not target_tool:
             return {"status": "failed", "error": f"Tool '{tool_name}' not found on server"}

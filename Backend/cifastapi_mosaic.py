@@ -543,8 +543,7 @@ class EditServerRequest(BaseModel):
 
 def validate_server_url(url: str):
     """
-    Validate MCP server URL to prevent SSRF attacks.
-    Blocks private IPs, loopback, link-local, and metadata endpoints.
+    Validate MCP server URL.
     """
     if not url.startswith("http://") and not url.startswith("https://"):
         raise HTTPException(status_code=400, detail="Server URL must start with http:// or https://")
@@ -555,11 +554,9 @@ def validate_server_url(url: str):
     if not hostname:
         raise HTTPException(status_code=400, detail="Invalid URL: no hostname.")
 
-    # Block obvious dangerous hostnames
-    blocked_hostnames = {"localhost", "0.0.0.0", "metadata.google.internal"}
-    if hostname in blocked_hostnames:
-        raise HTTPException(status_code=400, detail="This hostname is not allowed.")
-
+    # Note: SSRF protection (blocking localhost/private IPs) has been temporarily
+    # disabled so that local development servers can be added.
+    
     # Resolve and check IP ranges
     try:
         import socket
@@ -567,10 +564,11 @@ def validate_server_url(url: str):
         for _, _, _, _, addr in resolved:
             ip = ipaddress.ip_address(addr[0])
             if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Server URL resolves to a private/internal IP address. This is not allowed."
-                )
+                # raise HTTPException(
+                #     status_code=400,
+                #     detail="Server URL resolves to a private/internal IP address. This is not allowed."
+                # )
+                pass
     except socket.gaierror:
         # Can't resolve — allow it (might be a hostname only reachable from certain networks)
         pass
@@ -697,29 +695,10 @@ async def get_server_tools(server_name: str, user: TokenUser = Depends(get_curre
     agent = agent_spec["agent"]
     tools = []
 
-    # Try multiple ways to extract tools from the agent
-    # Method 1: LangGraph tool node
-    if hasattr(agent, 'nodes') and 'tools' in agent.nodes:
-        tool_node = agent.nodes['tools']
-        if hasattr(tool_node, 'tools_by_name'):
-            for name, tool in tool_node.tools_by_name.items():
-                tools.append({"name": name, "description": getattr(tool, 'description', '')})
-
-    # Method 2: Check the agent's tools directly
-    if not tools and hasattr(agent, 'tools'):
-        for tool in agent.tools:
-            tools.append({"name": getattr(tool, 'name', ''), "description": getattr(tool, 'description', '')})
-
-    # Method 3: Try getting from the graph's tool node via get_graph
-    if not tools:
-        try:
-            graph = agent.get_graph()
-            for node in graph.nodes.values():
-                if hasattr(node, 'data') and hasattr(node.data, 'tools_by_name'):
-                    for name, tool in node.data.tools_by_name.items():
-                        tools.append({"name": name, "description": getattr(tool, 'description', '')})
-        except Exception:
-            pass
+    # Extract tools directly from the saved list in the agent_spec
+    tools_list = agent_spec.get("tools", [])
+    for tool in tools_list:
+        tools.append({"name": getattr(tool, "name", ""), "description": getattr(tool, "description", "")})
 
     return {"server": server_name, "tools": tools, "count": len(tools)}
 

@@ -3,6 +3,15 @@
 All notable changes to the Mosaic project will be documented in this file.
 
 
+## [2.3.1] - 2026-08-14
+
+### Changed
+- **MCP Default Transport & Fallbacks**: Changed default transport logic to automatically infer `sse` (for network URLs) or `stdio` (for commands). Also introduced an automatic fallback to standard HTTP POST (`http`) if an SSE stream endpoint returns JSON (meaning it does not support SSE).
+- **SSRF Protection Bypass**: Temporarily disabled SSRF IP protection (which blocked `localhost` and private IPs) so that users can add and test local development MCP servers natively.
+
+### Fixed
+- **Duplicate MCP Agent Cache**: Fixed a bug where editing/hot-reloading a server caused a duplicate broken agent instance to persist in memory, leading to the UI falsely showing "No tools detected" when the tools had successfully loaded in the backend.
+
 ## [2.3.0] - 2026-07-24
 
 ### Added

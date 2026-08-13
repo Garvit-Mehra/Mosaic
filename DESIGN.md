@@ -348,7 +348,7 @@ graph LR
 - Sessions: httpOnly signed cookies (XSS-safe)
 - Backend tokens: JWT with type, expiry, role
 - Rate limiting: 5 login attempts / 5 min per IP
-- SSRF protection: blocks private IPs on MCP server URLs
+- SSRF protection: blocks private IPs on MCP server URLs (temporarily disabled for local dev)
 - Passwords: bcrypt with salt
 
 ---
