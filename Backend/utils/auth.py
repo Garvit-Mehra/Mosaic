@@ -163,8 +163,10 @@ class DBUserProvider(UserProvider):
         user = self.db.get_user_by_username(username)
         if user:
             return user
-        # Fallback to env vars (for bootstrap admin)
-        return self._env_fallback.get_user(username)
+        # Fallback to env vars (for bootstrap admin) ONLY in development
+        if _env != "production":
+            return self._env_fallback.get_user(username)
+        return None
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
@@ -221,6 +223,9 @@ def verify_token(token: str, expected_type: str = "access") -> TokenUser:
         raise HTTPException(status_code=401, detail="Invalid token.")
 
 
+# Pre-computed dummy hash to prevent timing attacks dynamically hashing salts
+_DUMMY_HASH = bcrypt.hashpw(b"dummy", bcrypt.gensalt())
+
 def authenticate_user(username: str, password: str) -> Optional[Dict]:
     """
     Authenticate a user. Returns user dict on success, None on failure.
@@ -229,7 +234,7 @@ def authenticate_user(username: str, password: str) -> Optional[Dict]:
     user = user_provider.get_user(username)
     if not user:
         # Still run bcrypt to prevent timing attacks revealing valid usernames
-        bcrypt.checkpw(password.encode(), bcrypt.hashpw(b"dummy", bcrypt.gensalt()))
+        bcrypt.checkpw(password.encode(), _DUMMY_HASH)
         return None
 
     if not user_provider.verify_password(password, user["password_hash"]):
@@ -252,7 +257,16 @@ async def get_current_user(
     FastAPI dependency: validates the Bearer token from the Authorization header.
     Returns the authenticated TokenUser.
     """
-    return verify_token(credentials.credentials, expected_type="access")
+    token_user = verify_token(credentials.credentials, expected_type="access")
+    
+    # Check if user still exists and role hasn't changed (invalidates tokens on delete/demote)
+    user = user_provider.get_user(token_user.username)
+    if not user:
+        raise HTTPException(status_code=401, detail="User no longer exists. Please log in again.")
+    if user["role"] != token_user.role:
+        raise HTTPException(status_code=401, detail="User role has changed. Please log in again.")
+        
+    return token_user
 
 
 async def require_admin(user: TokenUser = Depends(get_current_user)) -> TokenUser:

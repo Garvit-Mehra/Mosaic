@@ -112,8 +112,17 @@ class UserManager:
         # Validate username: alphanumeric + underscores only, 3-50 chars
         if not re.match(r'^[a-zA-Z0-9_]{3,50}$', username):
             raise ValueError("Username must be 3-50 characters, alphanumeric and underscores only.")
-        if len(password) < 6:
-            raise ValueError("Password must be at least 6 characters.")
+            
+        # Validate password strength: min 8 chars, 1 uppercase, 1 lowercase, 1 number
+        if len(password) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+        if not re.search(r'[A-Z]', password):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if not re.search(r'[a-z]', password):
+            raise ValueError("Password must contain at least one lowercase letter.")
+        if not re.search(r'[0-9]', password):
+            raise ValueError("Password must contain at least one number.")
+            
         if "@" not in email:
             raise ValueError("Invalid email address.")
 
@@ -212,18 +221,35 @@ class UserManager:
             if "verified" in kwargs:
                 user.verified = kwargs["verified"]
             if "password" in kwargs:
-                user.password_hash = bcrypt.hashpw(kwargs["password"].encode(), bcrypt.gensalt()).decode()
+                pwd = kwargs["password"]
+                if len(pwd) < 8 or not re.search(r'[A-Z]', pwd) or not re.search(r'[a-z]', pwd) or not re.search(r'[0-9]', pwd):
+                    raise ValueError("Password must be at least 8 chars, 1 uppercase, 1 lowercase, 1 number.")
+                user.password_hash = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
 
             return True
 
     def delete_user(self, username: str) -> bool:
-        """Delete a user by username."""
+        """Delete a user by username and cascade delete all their data."""
         with self.get_session() as session:
             user = session.query(User).filter(User.username == username).first()
             if not user:
                 return False
+                
+            # Cascade delete user's MCP servers
+            session.query(UserMCPServer).filter(UserMCPServer.user_id == username).delete()
+            
             session.delete(user)
-            return True
+            
+        # Cascade delete conversations
+        try:
+            from utils.ConversationDB import ConversationManager
+            conv_db = ConversationManager()
+            conv_db.delete_conversations_by_user(username)
+        except Exception as e:
+            # If ConversationDB fails, the user is still deleted, but log the error
+            print(f"Error cascade deleting conversations for {username}: {e}")
+            
+        return True
 
     def verify_user(self, username: str) -> bool:
         """Mark a user as verified."""

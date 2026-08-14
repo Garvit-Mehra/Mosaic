@@ -312,10 +312,31 @@ class MosaicHandler:
         messages.append({"role": "user", "content": user_message})
         return messages
 
-    async def _classify(self, user_input: str, history: List[Dict[str, str]]) -> str:
-        """Route the query to the correct agent."""
-        # Build agent list — only include non-general agents with descriptions
-        mcp_agents = [a for a in self.registry.agents if a["name"] not in ("general", "web", "rag")]
+    async def _classify(self, message: str, messages: List[Dict], user_id: Optional[str] = None) -> str:
+        """Use LLM to pick the right agent based on user's allowed servers."""
+        
+        # Base allowed agents
+        allowed_names = {"general", "web", "rag"}
+        
+        if user_id:
+            try:
+                from utils.UserDB import UserManager
+                db = UserManager()
+                user_servers = db.get_user_servers(user_id)
+                allowed_names.update(s["name"] for s in user_servers)
+            except Exception:
+                pass
+                
+        active_agents = [
+            a for a in self.registry.agents 
+            if a["name"] in allowed_names and a["name"] not in self.registry.inactive_servers
+        ]
+
+        if not active_agents:
+            return "general"
+
+        if len(active_agents) == 1:
+            return active_agents[0]["name"]
 
         prompt = (
             "You are a request router. Output ONLY a single agent name — nothing else.\n\n"
@@ -326,11 +347,13 @@ class MosaicHandler:
             "2. Output 'rag' ONLY if the user explicitly says 'my document', 'the PDF', 'loaded file', "
             "or directly references content they uploaded. Do NOT use 'rag' for general questions.\n"
         )
-
+        
+        mcp_agents = [a for a in active_agents if a["name"] not in ("general", "web", "rag")]
+        
         if mcp_agents:
             prompt += "3. Output an MCP agent name ONLY if the query explicitly requires a tool from that server:\n"
             for a in mcp_agents:
-                prompt += f"   - '{a['name']}': {a['description']}\n"
+                prompt += f"   - '{a['name']}': {a.get('description', '')}\n"
             prompt += "4. For EVERYTHING ELSE — coding, math, writing, explanations, opinions, creative tasks, follow-up questions — output 'general'.\n"
         else:
             prompt += "3. For EVERYTHING ELSE — output 'general'.\n"
@@ -345,18 +368,21 @@ class MosaicHandler:
             "- 'hello' → general\n"
             "- 'explain recursion' → general\n"
             "\n"
-            f"User query: {user_input}\n\n"
+            f"User query: {message}\n\n"
             "Output ONLY the agent name. No explanation, no punctuation."
         )
 
         result = await self.classifier.ainvoke(prompt)
         name = result.content.strip().split()[0].lower().strip(".,!?")
 
-        # Validate — default to general if unrecognised
-        if not self.registry.get_agent(name):
+        # Validate selection
+        valid_names = [a["name"] for a in active_agents]
+        if name not in valid_names:
             if name in self.registry.inactive_servers:
                 return "__inactive__:" + name
+            logger.warning(f"Classifier hallucinated '{name}', falling back to general.")
             return "general"
+
         return name
 
     async def chat(self, message: str, conversation_id: Optional[int] = None, user_id: Optional[str] = None) -> Dict[str, Any]:

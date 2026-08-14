@@ -208,10 +208,19 @@ class ConversationManager:
         """Delete a conversation and all its messages."""
         with self.get_session() as session:
             conversation = session.query(Conversation).filter(Conversation.id == conversation_id).first()
-            if conversation:
-                session.delete(conversation)
-                return True
-            return False
+            if not conversation:
+                return False
+            
+            session.delete(conversation)
+            return True
+
+    def delete_conversations_by_user(self, user_id: str) -> bool:
+        """Delete all conversations and messages for a specific user."""
+        with self.get_session() as session:
+            conversations = session.query(Conversation).filter(Conversation.user_id == user_id).all()
+            for conv in conversations:
+                session.delete(conv)
+            return True
 
     def search_conversations(self, query: str, user_id: Optional[str] = None) -> List[Any]:
         """Search conversations by title."""

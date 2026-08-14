@@ -93,6 +93,31 @@ export default function ChatPage() {
         return;
       }
 
+      if (!res.ok) {
+        let errorText = "An error occurred on the server.";
+        if (res.status === 429) {
+          errorText = "Too many messages, please slow down.";
+        } else {
+          try {
+            const errData = await res.json();
+            if (errData.detail) {
+              errorText = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+            }
+          } catch {
+            // Ignore parse errors for non-JSON responses
+          }
+        }
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: errorText, error: true }
+              : msg
+          )
+        );
+        setLoading(false);
+        return;
+      }
+
       if (!res.body) throw new Error("No response body");
 
       const reader = res.body.getReader();

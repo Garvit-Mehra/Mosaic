@@ -84,6 +84,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
 # Mount FlowQ as a sub-application at /jobs
 try:
     from flowq.src.main import create_app as create_flowq_app
@@ -396,7 +404,7 @@ async def chat(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
 
 
 @app.post("/chat/stream")
-async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
+async def chat_stream(request: Request, req: ChatRequest, user: TokenUser = Depends(get_current_user)):
     """Stream a response via Server-Sent Events."""
     import asyncio
 
@@ -434,6 +442,10 @@ async def chat_stream(req: ChatRequest, user: TokenUser = Depends(get_current_us
                 conversation_id=conv_id,
                 user_id=user.username,
             ):
+                if await request.is_disconnected():
+                    logger.info(f"[stream] Client disconnected, halting generation for conv={conv_id}")
+                    break
+
                 # Timeout check
                 if time.time() - start_time > STREAM_TIMEOUT:
                     yield f"data: {json.dumps({'type': 'error', 'content': 'Response timed out.'})}\n\n"
