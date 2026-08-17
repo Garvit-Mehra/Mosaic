@@ -120,6 +120,12 @@ export default function SideBar() {
         <div className="px-2 mb-2">
           <Link
             href="/"
+            onClick={(e) => {
+              if (pathname === "/") {
+                e.preventDefault();
+                window.dispatchEvent(new Event("mosaic-new-chat"));
+              }
+            }}
             className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors ${
               collapsed ? "justify-center" : ""
             }`}

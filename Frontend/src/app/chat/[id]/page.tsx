@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, use } from "react";
-import { ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowUp, ArrowDown, Plus } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { authFetch } from "@/src/lib/auth";
 import MessageBubble from "@/src/app/components/chat/MessageBubble";
+import ModelSelector from "../../components/common/ModelSelector";
 
 interface Message {
   id: number;
@@ -102,6 +103,8 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     ]);
 
     try {
+      const selectedModel = localStorage.getItem("mosaic_selected_model") || "llama3.2";
+
       const res = await fetch(`${BACKEND}/chat/stream`, {
         method: "POST",
         headers: {
@@ -111,6 +114,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
         body: JSON.stringify({
           message: messageContent,
           conversation_id: conversationId,
+          model: selectedModel,
         }),
       });
 
@@ -261,26 +265,39 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
-      {/* Input */}
+      {/* Input area */}
       <div className="border-t border-[var(--hover)] px-4 py-4">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex items-end gap-2 bg-[var(--input-bg)] rounded-2xl p-3 border border-[var(--hover)]">
+        <div className="max-w-3xl mx-auto w-full">
+          <div className="flex flex-col gap-2 bg-[#2f2f2f] rounded-3xl p-2 border border-transparent focus-within:border-gray-600 transition-colors shadow-sm">
             <textarea
               ref={textareaRef}
               rows={1}
-              className="flex-1 resize-none bg-transparent text-[var(--foreground)] placeholder-[var(--color3)] focus:outline-none text-sm px-2 py-1"
-              placeholder="Continue the conversation..."
+              className="flex-1 w-full resize-none bg-transparent text-gray-200 placeholder-gray-400 focus:outline-none text-base px-4 py-3 min-h-[52px]"
+              placeholder="Send a message"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
             />
-            <button
-              onClick={() => sendMessage()}
-              disabled={!input.trim() || loading}
-              className="p-2 rounded-xl bg-[var(--color2)] text-[var(--color4)] disabled:opacity-30 hover:opacity-80 transition-opacity cursor-pointer disabled:cursor-not-allowed"
-            >
-              <ArrowUp className="w-4 h-4" />
-            </button>
+            
+            <div className="flex items-center justify-end gap-2 px-2 pb-1">
+              <button className="p-2 rounded-full bg-gray-600/30 text-gray-400 hover:text-gray-200 transition-colors" disabled>
+                <Plus className="w-4 h-4" />
+              </button>
+              
+              <ModelSelector />
+              
+              <button
+                onClick={() => sendMessage()}
+                disabled={!input.trim() || loading}
+                className={`p-2 rounded-full transition-colors ${
+                  !input.trim() || loading 
+                  ? "bg-gray-600/30 text-gray-500 cursor-not-allowed" 
+                  : "bg-white text-black hover:bg-gray-200 cursor-pointer"
+                }`}
+              >
+                <ArrowUp className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

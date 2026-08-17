@@ -64,6 +64,13 @@ STREAM_TIMEOUT = int(os.getenv("STREAM_TIMEOUT_SECONDS", "120"))
 async def lifespan(app: FastAPI):
     global handler
     logger.info("Mosaic backend starting up...")
+    
+    # Load all saved user MCP servers into the global configuration on startup
+    for u in user_db.list_users():
+        for config in user_db.get_user_servers(u["username"]):
+            if config["name"] not in [c["name"] for c in SERVER_CONFIGS]:
+                SERVER_CONFIGS.append(config)
+                
     await registry.initialize(SERVER_CONFIGS, web_search=bool(TAVILY_API_KEY))
     handler = MosaicHandler(registry, conversation_db)
     logger.info(f"✓ Agents loaded: {[a['name'] for a in registry.agents]}")
@@ -175,6 +182,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10000)
     conversation_id: Optional[int] = None
     transient: bool = False
+    model: Optional[str] = None
 
 
 class ConversationCreateRequest(BaseModel):
@@ -360,7 +368,7 @@ async def oauth_login(req: OAuthRequest, request: Request):
 # --- Chat ---
 @app.post("/chat")
 async def chat(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
-    """Send a message and get a response."""
+    """Process a chat message via HTTP blockingly (non-streaming)."""
     # Rate limit per user
     if not chat_rate_limiter.check(f"chat:{user.username}"):
         raise HTTPException(status_code=429, detail="Too many messages. Please slow down.")
@@ -388,6 +396,7 @@ async def chat(req: ChatRequest, user: TokenUser = Depends(get_current_user)):
         req.message,
         conversation_id=conv_id,
         user_id=user.username,
+        model=req.model,
     )
 
     logger.info(f"Response: conv={conv_id} agent={result.get('agent')} len={len(result['response'])}")
@@ -441,6 +450,7 @@ async def chat_stream(request: Request, req: ChatRequest, user: TokenUser = Depe
                 req.message,
                 conversation_id=conv_id,
                 user_id=user.username,
+                model=req.model,
             ):
                 if await request.is_disconnected():
                     logger.info(f"[stream] Client disconnected, halting generation for conv={conv_id}")
@@ -564,6 +574,23 @@ class AddServerRequest(BaseModel):
 class EditServerRequest(BaseModel):
     description: Optional[str] = None
     url: Optional[str] = None
+
+
+@app.get("/api/models")
+async def get_ollama_models():
+    """Fetch installed models from the local Ollama instance."""
+    ollama_url = os.getenv("LLM_BASE_URL", "http://localhost:11434")
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{ollama_url}/api/tags", timeout=3.0)
+            if response.status_code == 200:
+                data = response.json()
+                return {"models": [model["name"] for model in data.get("models", [])]}
+            return {"models": ["llama3.2", "mistral"]}  # Fallback
+    except Exception as e:
+        logger.error(f"Failed to fetch Ollama models: {e}")
+        return {"models": ["llama3.2", "mistral"]}  # Fallback
 
 
 def validate_server_url(url: str):
@@ -707,7 +734,6 @@ async def get_server_tools(server_name: str, user: TokenUser = Depends(get_curre
     if not agent_spec:
         raise HTTPException(status_code=404, detail=f"Server '{server_name}' not connected.")
 
-    agent = agent_spec["agent"]
     tools = []
 
     # Extract tools directly from the saved list in the agent_spec

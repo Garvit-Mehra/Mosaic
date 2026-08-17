@@ -11,7 +11,11 @@ export default function KeyboardShortcuts() {
       // Cmd+K or Ctrl+K for New Chat
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        router.push("/");
+        if (window.location.pathname === "/") {
+          window.dispatchEvent(new Event("mosaic-new-chat"));
+        } else {
+          router.push("/");
+        }
       }
       
       // Cmd+/ or Ctrl+/ for Settings

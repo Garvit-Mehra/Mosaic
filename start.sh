@@ -84,7 +84,7 @@ fi
 # 2. Backend
 echo -n "  Starting Backend (port 8080)... "
 cd "$ROOT_DIR/Backend"
-source "$ROOT_DIR/.venv/bin/activate"
+source "$ROOT_DIR/Backend/.venv/bin/activate"
 uvicorn cifastapi_mosaic:app --port 8080 > "$LOG_DIR/backend_stdout.log" 2>&1 &
 BACKEND_PID=$!
 echo $BACKEND_PID > "$PID_DIR/backend.pid"

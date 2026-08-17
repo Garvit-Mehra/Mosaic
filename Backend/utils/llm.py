@@ -88,14 +88,15 @@ def get_chat_model(
         )
 
 
-def get_classifier_model():
+def get_classifier_model(model: Optional[str] = None):
     """Get a fast model for agent classification (low temperature, no reasoning)."""
-    return get_chat_model(temperature=0.0, reasoning=False)
+    return get_chat_model(model=model, temperature=0.0, reasoning=False)
 
 
-def get_agent_model():
+def get_agent_model(model: Optional[str] = None):
     """Get the model used by agents for generating responses."""
     return get_chat_model(
+        model=model,
         temperature=float(os.getenv("LLM_TEMPERATURE", "0.7")),
         reasoning=False,
     )

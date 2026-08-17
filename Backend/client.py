@@ -120,17 +120,13 @@ class AgentRegistry:
         agents.append({
             "name": "general",
             "description": "For writing, coding, math, explanations, creative tasks, opinions, and all general questions.",
-            "agent": create_react_agent(
-                get_agent_model(),
-                tools=[],
-                prompt=(
-                    "You are Mosaic, a helpful AI assistant. "
-                    "You have NO tools. Never output JSON or function calls. "
-                    "Always respond directly in plain text or markdown. "
-                    "Be concise and helpful. Write code when asked. "
-                    "Do not restate the question or add unnecessary preamble."
-                ),
-                checkpointer=MemorySaver()
+            "tools": [],
+            "prompt": (
+                "You are Mosaic, a helpful AI assistant. "
+                "You have NO tools. Never output JSON or function calls. "
+                "Always respond directly in plain text or markdown. "
+                "Be concise and helpful. Write code when asked. "
+                "Do not restate the question or add unnecessary preamble."
             ),
         })
 
@@ -139,23 +135,19 @@ class AgentRegistry:
             agents.append({
                 "name": "web",
                 "description": "ONLY for live/real-time info: current news, weather, stock prices, sports scores.",
-                "agent": create_react_agent(
-                    get_agent_model(),
-                    tools=[TavilySearch(api_key=TAVILY_API_KEY, max_results=3)],
-                    prompt=(
-                        "You are Mosaic, a helpful AI assistant with access to web search.\n"
-                        "When you receive a query:\n"
-                        "1. Use the search tool to find current information.\n"
-                        "2. Read the search results carefully.\n"
-                        "3. Write a clear, natural language answer as if explaining to a person.\n"
-                        "4. Do NOT dump raw search results, JSON, or URLs at the user.\n"
-                        "5. Do NOT say 'According to search results' or 'Based on the results' — just answer directly.\n"
-                        "6. Include specific facts, numbers, and dates from the results.\n"
-                        "7. Keep it concise — 2-4 sentences unless more detail is needed.\n"
-                        "8. If the search returns nothing useful, say so honestly.\n"
-                        "9. If a search tool fails, encounters an error, or needs to be retried, DO NOT output any apology or explanation (e.g. do NOT say 'It seems that there was an issue...'). Simply call the tool again immediately and silently."
-                    ),
-                    checkpointer=MemorySaver()
+                "tools": [TavilySearch(api_key=TAVILY_API_KEY, max_results=3)],
+                "prompt": (
+                    "You are Mosaic, a helpful AI assistant with access to web search.\n"
+                    "When you receive a query:\n"
+                    "1. Use the search tool to find current information.\n"
+                    "2. Read the search results carefully.\n"
+                    "3. Write a clear, natural language answer as if explaining to a person.\n"
+                    "4. Do NOT dump raw search results, JSON, or URLs at the user.\n"
+                    "5. Do NOT say 'According to search results' or 'Based on the results' — just answer directly.\n"
+                    "6. Include specific facts, numbers, and dates from the results.\n"
+                    "7. Keep it concise — 2-4 sentences unless more detail is needed.\n"
+                    "8. If the search returns nothing useful, say so honestly.\n"
+                    "9. If a search tool fails, encounters an error, or needs to be retried, DO NOT output any apology or explanation (e.g. do NOT say 'It seems that there was an issue...'). Simply call the tool again immediately and silently."
                 ),
             })
 
@@ -177,15 +169,10 @@ class AgentRegistry:
                             "name": config["name"],
                             "description": config["description"],
                             "tools": mcp_tools,
-                            "agent": create_react_agent(
-                                get_agent_model(),
-                                tools=mcp_tools,
-                                prompt=(
-                                    f"You are Mosaic's {config['name'].replace('_', ' ').title()} agent. "
-                                    f"{config['description']} "
-                                    "Give only the requested information."
-                                ),
-                                checkpointer=MemorySaver()
+                            "prompt": (
+                                f"You are Mosaic's {config['name'].replace('_', ' ').title()} agent. "
+                                f"{config['description']} "
+                                "Give only the requested information."
                             ),
                         })
                     except Exception as e:
@@ -196,15 +183,11 @@ class AgentRegistry:
         agents.append({
             "name": "rag",
             "description": "ONLY when user explicitly asks about a loaded PDF, document, or file they uploaded.",
-            "agent": create_react_agent(
-                get_agent_model(),
-                tools=[load_document, query_documents, list_documents, clear_documents],
-                prompt=(
-                    "You are Mosaic's RAG agent. "
-                    "Answer strictly from the loaded documents. "
-                    "If the answer is not in the docs, say so briefly."
-                ),
-                checkpointer=MemorySaver()
+            "tools": [load_document, query_documents, list_documents, clear_documents],
+            "prompt": (
+                "You are Mosaic's RAG agent. "
+                "Answer strictly from the loaded documents. "
+                "If the answer is not in the docs, say so briefly."
             ),
         })
 
@@ -235,15 +218,10 @@ class AgentRegistry:
                             "name": config["name"],
                             "description": config["description"],
                             "tools": mcp_tools,
-                            "agent": create_react_agent(
-                                get_agent_model(),
-                                tools=mcp_tools,
-                                prompt=(
-                                    f"You are Mosaic's {config['name'].replace('_', ' ').title()} agent. "
-                                    f"{config['description']} "
-                                    "Give only the requested information."
-                                ),
-                                checkpointer=MemorySaver()
+                            "prompt": (
+                                f"You are Mosaic's {config['name'].replace('_', ' ').title()} agent. "
+                                f"{config['description']} "
+                                "Give only the requested information."
                             ),
                         })
                         if config["name"] in self.inactive_servers:
@@ -386,7 +364,7 @@ class MosaicHandler:
 
         return name
 
-    async def chat(self, message: str, conversation_id: Optional[int] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
+    async def chat(self, message: str, conversation_id: Optional[int] = None, user_id: Optional[str] = None, model: Optional[str] = None) -> Dict[str, Any]:
         """Process a chat message (non-streaming). Stateless.
         
         Detects long-running operations and offloads them to the FlowQ,
@@ -410,8 +388,14 @@ class MosaicHandler:
             agent_spec = self.registry.get_agent("general")
 
         try:
+            agent_executor = create_react_agent(
+                get_agent_model(model),
+                tools=agent_spec.get("tools", []),
+                prompt=agent_spec.get("prompt", ""),
+                checkpointer=MemorySaver()
+            )
             config = {"configurable": {"thread_id": f"{user_id or 'anon'}_{conversation_id or 'new'}"}}
-            result = await agent_spec["agent"].ainvoke({"messages": messages}, config)
+            result = await agent_executor.ainvoke({"messages": messages}, config)
             ai_message = result["messages"][-1].content
             return {"response": ai_message, "agent": agent_spec["name"]}
         except Exception as e:
@@ -508,7 +492,7 @@ class MosaicHandler:
 
         return None
 
-    async def chat_stream(self, message: str, conversation_id: Optional[int] = None, user_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
+    async def chat_stream(self, message: str, conversation_id: Optional[int] = None, user_id: Optional[str] = None, model: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """Process a chat message with streaming. Stateless.
         
         Detects background tasks and yields an immediate response if offloaded.
@@ -537,10 +521,16 @@ class MosaicHandler:
         yield {"type": "agent", "agent": agent_spec["name"]}
 
         try:
+            agent_executor = create_react_agent(
+                get_agent_model(model),
+                tools=agent_spec.get("tools", []),
+                prompt=agent_spec.get("prompt", ""),
+                checkpointer=MemorySaver()
+            )
             config = {"configurable": {"thread_id": f"{user_id or 'anon'}_{conversation_id or 'new'}"}}
             full_response = ""
 
-            async for event in agent_spec["agent"].astream_events(
+            async for event in agent_executor.astream_events(
                 {"messages": messages}, config, version="v2"
             ):
                 if event.get("event") == "on_chat_model_stream":
