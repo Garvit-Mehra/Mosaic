@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, use } from "react";
-import { ArrowUp, ArrowDown, Loader2 } from "lucide-react";
+import { ArrowUp, ArrowDown } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { authFetch } from "@/src/lib/auth";
 import MessageBubble from "@/src/app/components/chat/MessageBubble";

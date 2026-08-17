@@ -87,6 +87,8 @@ cache/
 .coverage
 htmlcov/
 .pytest_cache/
+tests/
+.hypothesis/
 
 # Jupyter Notebook
 .ipynb_checkpoints

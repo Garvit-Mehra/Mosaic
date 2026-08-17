@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from langchain_tavily import TavilySearch
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
+import pydantic.root_model
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from utils.RAGTools import load_document, query_documents, list_documents, clear_documents

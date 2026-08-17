@@ -5,7 +5,6 @@ import {
   Shield,
   Activity,
   Trash2,
-  FileText,
   AlertTriangle,
   Server,
   Settings,
@@ -53,6 +52,7 @@ export default function AdminPage() {
   useEffect(() => {
     // Admin check handled by middleware — just load data
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadData = async () => {
@@ -108,6 +108,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (activeTab === "logs") loadLogs();
     if (activeTab === "errors") loadErrorLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   if (loading) {

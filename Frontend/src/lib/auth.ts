@@ -5,7 +5,6 @@
  * avoiding repeated /api/auth/session calls.
  */
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 export interface User {
   name?: string | null;

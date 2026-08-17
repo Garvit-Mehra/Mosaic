@@ -234,6 +234,7 @@ export default function ChatPage() {
         })
         .catch(() => {}); // silent
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

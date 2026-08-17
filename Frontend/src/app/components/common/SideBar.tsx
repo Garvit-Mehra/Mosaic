@@ -62,6 +62,7 @@ export default function SideBar() {
         window.removeEventListener("mosaic-sidebar-refresh", handleRefresh);
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendToken]);
 
   const deleteConversation = async (id: number, e: React.MouseEvent) => {

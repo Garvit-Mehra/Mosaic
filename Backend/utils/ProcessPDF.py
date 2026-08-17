@@ -1,7 +1,12 @@
 import os
 import io
 import camelot
-import PyPDF2
+import warnings
+
+# Suppress known harmless warnings from external libraries
+warnings.filterwarnings("ignore", message="The NumPy module was reloaded")
+
+import pypdf
 from PIL import Image
 from dotenv import load_dotenv
 from pdf2image import convert_from_path
@@ -9,7 +14,7 @@ import openai
 import base64
 from typing import List, Dict, Any
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
+from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
@@ -37,7 +42,7 @@ def get_embeddings():
 def extract_text_from_pdf(pdf_path):
     text_content = ""
     with open(pdf_path, "rb") as file:
-        reader = PyPDF2.PdfReader(file)
+        reader = pypdf.PdfReader(file)
         for i, page in enumerate(reader.pages):
             text = page.extract_text()
             if text:
@@ -160,7 +165,7 @@ def add_document_to_store(file_path: str, content: str) -> str:
     chunks = create_document_chunks(content)
     
     if vector_store is None:
-        vector_store = FAISS.from_documents(chunks, get_embeddings())
+        vector_store = InMemoryVectorStore.from_documents(chunks, get_embeddings())
     else:
         vector_store.add_documents(chunks)
     

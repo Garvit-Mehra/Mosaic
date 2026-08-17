@@ -25,8 +25,6 @@ logs/
 __pycache__/
 *.pyc
 
-# Old backup
-Mosaic-old/
 
 # Version tracking (local only)
 VERSION
@@ -37,3 +35,14 @@ PROJECT_DEEP_DIVE.md
 test.py
 test_functions.py
 stress_test.py
+
+# Automated Testing Pipeline (Local Only)
+Backend/tests/
+Backend/.pytest_cache/
+Backend/.coverage
+Frontend/e2e/
+Frontend/playwright.config.ts
+Frontend/playwright-report/
+Frontend/test-results/
+local_ci.sh
+TESTING.md
