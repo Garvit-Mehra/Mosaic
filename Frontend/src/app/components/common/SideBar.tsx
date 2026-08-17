@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { MessageCircle, SquarePen, ChevronLeft, ChevronRight, Trash2, Settings, LogOut, Shield, Sun, Moon, Search } from "lucide-react";
+import { MessageCircle, SquarePen, ChevronLeft, ChevronRight, Trash2, Settings, LogOut, Shield, Sun, Moon, Search, Database } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
@@ -204,6 +204,15 @@ export default function SideBar() {
             )}
             {!collapsed && <span className="text-[var(--color3)]">{theme === "dark" ? "Light mode" : "Dark mode"}</span>}
           </button>
+          <Link
+            href="/models"
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors ${
+              pathname === "/models" ? "bg-[var(--hover)]" : ""
+            } ${collapsed ? "justify-center" : ""}`}
+          >
+            <Database size={16} className="text-[var(--color3)] flex-shrink-0" />
+            {!collapsed && <span className="text-[var(--color3)]">Models</span>}
+          </Link>
           <Link
             href="/settings"
             className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors ${

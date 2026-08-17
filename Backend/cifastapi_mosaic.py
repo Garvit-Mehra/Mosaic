@@ -593,6 +593,61 @@ async def get_ollama_models():
         return {"models": ["llama3.2", "mistral"]}  # Fallback
 
 
+@app.get("/api/models/details")
+async def get_ollama_model_details():
+    """Fetch installed models with full details and system hardware specs."""
+    ollama_url = os.getenv("LLM_BASE_URL", "http://localhost:11434")
+    
+    # Get total system RAM in bytes
+    try:
+        system_ram = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES')
+    except Exception:
+        system_ram = 8 * 1024 * 1024 * 1024  # Fallback to 8GB if sysconf fails
+
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{ollama_url}/api/tags", timeout=3.0)
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "models": data.get("models", []),
+                    "system": {
+                        "ram_bytes": system_ram
+                    }
+                }
+            return {"models": [], "system": {"ram_bytes": system_ram}}
+    except Exception as e:
+        logger.error(f"Failed to fetch Ollama model details: {e}")
+        return {"models": [], "system": {"ram_bytes": system_ram}}
+
+
+class PullModelRequest(BaseModel):
+    name: str
+
+@app.post("/api/models/pull")
+async def pull_ollama_model(req: PullModelRequest):
+    """Trigger Ollama to download a model. Runs synchronously and waits for completion."""
+    ollama_url = os.getenv("LLM_BASE_URL", "http://localhost:11434")
+    try:
+        import httpx
+        # A timeout of None is used because model pulls can take a very long time
+        async with httpx.AsyncClient() as client:
+            # stream=False is sent to Ollama so it returns a single JSON object on completion
+            response = await client.post(
+                f"{ollama_url}/api/pull",
+                json={"name": req.name, "stream": False},
+                timeout=None
+            )
+            if response.status_code == 200:
+                return {"status": "success", "message": f"Successfully pulled {req.name}"}
+            else:
+                raise HTTPException(status_code=response.status_code, detail=response.text)
+    except Exception as e:
+        logger.error(f"Failed to pull Ollama model {req.name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def validate_server_url(url: str):
     """
     Validate MCP server URL.
