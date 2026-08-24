@@ -48,3 +48,5 @@ Frontend/test-results/
 local_ci.sh
 TESTING.md
 Backend/chroma_db/
+UI.md
+CNAME

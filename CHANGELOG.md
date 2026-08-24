@@ -3,6 +3,13 @@
 All notable changes to the Mosaic project will be documented in this file.
 
 
+## [2.3.7] - 2026-08-24
+
+### Fixed
+- **RAG Document Isolation**: Fixed an issue where documents uploaded on the homepage were inadvertently shared across new conversations by tracking file uploads with a unique `temp_id` in `sessionStorage` and `ChatRequest`, ensuring proper file isolation and migration to the designated conversation DB.
+- **Tavily Web Agent SSL Crash**: Added a patch via `certifi` to route `aiohttp` to the correct SSL certificates on macOS, resolving a `CERTIFICATE_VERIFY_FAILED` crash when the Web Agent queried `api.tavily.com`.
+- **RAG Routing Rules**: Relaxed the router's system prompt so that follow-up questions about documents are correctly routed to the RAG agent rather than the Web Agent.
+
 ## [2.3.6] - 2026-08-14
 
 ### Added
