@@ -1,6 +1,9 @@
+import contextvars
 from langchain.tools import tool
 from .ProcessPDF import load_document_tool, query_documents_tool, list_documents_tool, clear_documents_tool
 
+# Context variable to hold the active conversation ID during agent execution
+conversation_context = contextvars.ContextVar('conversation_context', default="temp")
 
 @tool
 def load_document(file_path: str) -> str:
@@ -13,7 +16,8 @@ def load_document(file_path: str) -> str:
     Returns:
         Status message indicating success or failure
     """
-    return load_document_tool(file_path)
+    conv_id = conversation_context.get()
+    return load_document_tool(file_path, conv_id)
 
 
 @tool
@@ -27,7 +31,8 @@ def query_documents(query: str) -> str:
     Returns:
         Relevant information from documents with relevance scores
     """
-    return query_documents_tool(query)
+    conv_id = conversation_context.get()
+    return query_documents_tool(query, conv_id)
 
 
 @tool
@@ -38,7 +43,8 @@ def list_documents() -> str:
     Returns:
         Summary of all loaded documents
     """
-    return list_documents_tool()
+    conv_id = conversation_context.get()
+    return list_documents_tool(conv_id)
 
 
 @tool
@@ -49,4 +55,5 @@ def clear_documents() -> str:
     Returns:
         Confirmation message
     """
-    return clear_documents_tool() 
+    conv_id = conversation_context.get()
+    return clear_documents_tool(conv_id) 

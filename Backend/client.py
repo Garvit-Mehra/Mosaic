@@ -20,7 +20,7 @@ from langgraph.checkpoint.memory import MemorySaver
 import pydantic.root_model
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-from utils.RAGTools import load_document, query_documents, list_documents, clear_documents
+from utils.RAGTools import load_document, query_documents, list_documents, clear_documents, conversation_context
 from utils.llm import get_classifier_model, get_agent_model
 from utils.ConversationDB import ConversationManager
 
@@ -183,11 +183,12 @@ class AgentRegistry:
         agents.append({
             "name": "rag",
             "description": "ONLY when user explicitly asks about a loaded PDF, document, or file they uploaded.",
-            "tools": [load_document, query_documents, list_documents, clear_documents],
+            "tools": [query_documents, list_documents],
             "prompt": (
-                "You are Mosaic's RAG agent. "
-                "Answer strictly from the loaded documents. "
-                "If the answer is not in the docs, say so briefly."
+                "You are Mosaic's RAG agent. You must ALWAYS use the query_documents tool to read the attached files before responding to the user. "
+                "If the user's request is vague (e.g., 'help me', 'solve this', 'analyze'), use the query_documents tool with broad search terms (e.g., 'overview', 'assignment', 'summary', 'introduction') to figure out what the document is about, and then assist them based on that. "
+                "Answer strictly based on the information retrieved from the documents. "
+                "If the answer is not in the documents after querying, ask the user for clarification."
             ),
         })
 
@@ -324,7 +325,8 @@ class MosaicHandler:
             "current news headlines, live sports scores, today's stock prices, current weather. "
             "Do NOT use 'web' for general knowledge, definitions, explanations, history, or anything that doesn't change.\n"
             "2. Output 'rag' ONLY if the user explicitly says 'my document', 'the PDF', 'loaded file', "
-            "or directly references content they uploaded. Do NOT use 'rag' for general questions.\n"
+            "directly references content they uploaded, or if the message starts with '[Attached files:'. "
+            "Do NOT use 'rag' for general questions.\n"
         )
         
         mcp_agents = [a for a in active_agents if a["name"] not in ("general", "web", "rag")]
@@ -388,6 +390,47 @@ class MosaicHandler:
             agent_spec = self.registry.get_agent("general")
 
         try:
+            conv_id_str = str(conversation_id or "temp")
+            conversation_context.set(conv_id_str)
+
+            # --- RAG: Programmatic retrieval instead of tool-calling ---
+            if agent_spec["name"] == "rag":
+                import re
+                from utils.ProcessPDF import search_documents, get_document_summary
+                
+                user_query = message
+                user_query = re.sub(r'\[Attached files:[^\]]*\]\s*', '', user_query).strip()
+                if not user_query:
+                    user_query = "summarize the document"
+                
+                results = search_documents(user_query, conv_id_str, k=5)
+                doc_summary = get_document_summary(conv_id_str)
+                
+                context_parts = [f"=== Loaded Documents ===\n{doc_summary}", "\n=== Retrieved Context ==="]
+                for i, result in enumerate(results, 1):
+                    source = result.get('metadata', {}).get('source', 'Unknown')
+                    context_parts.append(f"\n--- Chunk {i} (Source: {source}) ---\n{result['content']}")
+                
+                retrieved_context = "\n".join(context_parts)
+                
+                rag_messages = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are Mosaic's RAG agent. Answer the user's question based ONLY on the document context provided below. "
+                            "If the context doesn't contain enough information to answer, say so clearly. "
+                            "Do not make up information. Cite the source document when possible.\n\n"
+                            f"{retrieved_context}"
+                        )
+                    },
+                    {"role": "user", "content": user_query}
+                ]
+                
+                llm = get_agent_model(model)
+                result = await llm.ainvoke(rag_messages)
+                return {"response": result.content, "agent": "rag"}
+            # --- End RAG ---
+
             agent_executor = create_react_agent(
                 get_agent_model(model),
                 tools=agent_spec.get("tools", []),
@@ -496,6 +539,8 @@ class MosaicHandler:
         """Process a chat message with streaming. Stateless.
         
         Detects background tasks and yields an immediate response if offloaded.
+        For RAG queries, programmatically retrieves document context instead of
+        relying on the LLM to call tools (which small models often fail at).
         """
         # Check if this should be a background task
         bg_result = await self._check_background_task(message, user_id)
@@ -521,6 +566,74 @@ class MosaicHandler:
         yield {"type": "agent", "agent": agent_spec["name"]}
 
         try:
+            conv_id_str = str(conversation_id or "temp")
+            conversation_context.set(conv_id_str)
+
+            # --- RAG: Programmatic retrieval instead of tool-calling ---
+            if agent_spec["name"] == "rag":
+                from utils.ProcessPDF import search_documents, get_document_summary
+                
+                # Extract the user's actual query (strip the [Attached files: ...] prefix)
+                import re
+                user_query = message
+                user_query = re.sub(r'\[Attached files:[^\]]*\]\s*', '', user_query).strip()
+                if not user_query:
+                    user_query = "summarize the document"
+                
+                # Programmatically search the vector store
+                results = search_documents(user_query, conv_id_str, k=5)
+                doc_summary = get_document_summary(conv_id_str)
+                
+                # Build the retrieved context
+                context_parts = []
+                context_parts.append(f"=== Loaded Documents ===\n{doc_summary}")
+                context_parts.append("\n=== Retrieved Context ===")
+                for i, result in enumerate(results, 1):
+                    source = result.get('metadata', {}).get('source', 'Unknown')
+                    context_parts.append(f"\n--- Chunk {i} (Source: {source}) ---\n{result['content']}")
+                
+                retrieved_context = "\n".join(context_parts)
+                
+                logger.info(f"[RAG] Retrieved {len(results)} chunks for conv={conv_id_str} query='{user_query[:60]}'")
+                
+                # Build a RAG-augmented message list (no tools needed)
+                from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+                rag_messages = []
+                for msg in messages:
+                    if msg["role"] == "system":
+                        rag_messages.append(SystemMessage(content=(
+                            "You are Mosaic's RAG agent. Answer the user's question based ONLY on the document context provided below. "
+                            "If the context doesn't contain enough information to answer, say so clearly. "
+                            "Do not make up information. Cite the source document when possible.\n\n"
+                            f"{retrieved_context}"
+                        )))
+                    elif msg["role"] == "user":
+                        rag_messages.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "assistant":
+                        rag_messages.append(AIMessage(content=msg["content"]))
+                        
+                # Ensure we have at least a system message if messages was empty
+                if not any(isinstance(m, SystemMessage) for m in rag_messages):
+                    rag_messages.insert(0, SystemMessage(content=(
+                        "You are Mosaic's RAG agent. Answer the user's question based ONLY on the document context provided below. "
+                        "If the context doesn't contain enough information to answer, say so clearly. "
+                        "Do not make up information. Cite the source document when possible.\n\n"
+                        f"{retrieved_context}"
+                    )))
+                
+                # Stream directly from the LLM (no agent/tools needed)
+                llm = get_agent_model(model)
+                full_response = ""
+                
+                async for chunk in llm.astream(rag_messages):
+                    if hasattr(chunk, "content") and chunk.content:
+                        full_response += chunk.content
+                        yield {"type": "token", "content": chunk.content}
+                
+                yield {"type": "done", "full_response": full_response}
+                return
+            # --- End RAG ---
+
             agent_executor = create_react_agent(
                 get_agent_model(model),
                 tools=agent_spec.get("tools", []),
@@ -544,3 +657,4 @@ class MosaicHandler:
         except Exception as e:
             logger.error(f"Streaming error: {e}")
             yield {"type": "error", "content": "I encountered an error while processing your request."}
+

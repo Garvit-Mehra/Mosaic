@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, use } from "react";
-import { ArrowUp, ArrowDown, Plus } from "lucide-react";
+import { ArrowUp, ArrowDown, Plus, File as FileIcon, X, Loader2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { authFetch } from "@/src/lib/auth";
 import MessageBubble from "@/src/app/components/chat/MessageBubble";
 import ModelSelector from "../../components/common/ModelSelector";
+import FileUploadButton from "@/src/app/components/chat/FileUploadButton";
+import ActiveDocuments from "@/src/app/components/chat/ActiveDocuments";
 
 interface Message {
   id: number;
@@ -25,6 +27,8 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -80,8 +84,18 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   }, [input]);
 
   const sendMessage = async (retryContent?: string) => {
-    const messageContent = retryContent || input.trim();
-    if (!messageContent || loading) return;
+    let messageContent = retryContent || input.trim();
+    
+    // Prepend attached files info if this is a new message with files
+    if (!retryContent && pendingFiles.length > 0) {
+      const fileNames = pendingFiles.map(f => f.name).join(", ");
+      const prefix = `[Attached files: ${fileNames}]\n\n`;
+      messageContent = prefix + (messageContent || "Please analyze the attached document(s).");
+    }
+    if (!messageContent && pendingFiles.length === 0) return;
+    if (loading) return;
+
+    
 
     if (!retryContent) {
       const userMessage: Message = {
@@ -95,6 +109,31 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
     setLoading(true);
     setAutoScroll(true);
+
+    // Upload pending files first
+    if (pendingFiles.length > 0) {
+      setUploadingFiles(true);
+      const convId = conversationId || "temp";
+      
+      for (const file of pendingFiles) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("conversation_id", convId.toString());
+
+        try {
+          await fetch(`${BACKEND}/api/documents/upload`, {
+            method: "POST",
+            body: formData,
+          });
+        } catch (e) {
+          console.error("Failed to upload file", e);
+        }
+      }
+      
+      setPendingFiles([]);
+      setUploadingFiles(false);
+      window.dispatchEvent(new Event("document-uploaded"));
+    }
 
     const assistantId = Date.now() + 1;
     setMessages((prev) => [
@@ -227,7 +266,8 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
+      <ActiveDocuments conversationId={String(conversationId)} />
       {/* Messages */}
       <div
         ref={scrollContainerRef}
@@ -269,6 +309,30 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       <div className="border-t border-[var(--hover)] px-4 py-4">
         <div className="max-w-3xl mx-auto w-full">
           <div className="flex flex-col gap-2 bg-[#2f2f2f] rounded-3xl p-2 border border-transparent focus-within:border-gray-600 transition-colors shadow-sm">
+            {/* Pending Files Tray */}
+            {pendingFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 px-3 pt-2">
+                {pendingFiles.map((file, idx) => (
+                  <div key={idx} className="flex items-center gap-2 bg-[#404040] rounded-xl px-3 py-2 text-sm max-w-[200px]">
+                    {uploadingFiles ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-[var(--color1)] shrink-0" />
+                    ) : (
+                      <FileIcon className="w-4 h-4 text-[var(--color1)] shrink-0" />
+                    )}
+                    <span className="truncate text-gray-200">{file.name}</span>
+                    {!uploadingFiles && (
+                      <button
+                        onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== idx))}
+                        className="p-0.5 hover:bg-[#505050] rounded-full text-gray-400 hover:text-white shrink-0"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <textarea
               ref={textareaRef}
               rows={1}
@@ -280,17 +344,15 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
             />
             
             <div className="flex items-center justify-end gap-2 px-2 pb-1">
-              <button className="p-2 rounded-full bg-gray-600/30 text-gray-400 hover:text-gray-200 transition-colors" disabled>
-                <Plus className="w-4 h-4" />
-              </button>
+              <FileUploadButton onFileSelect={(file) => setPendingFiles(prev => [...prev, file])} disabled={uploadingFiles} />
               
               <ModelSelector />
               
               <button
                 onClick={() => sendMessage()}
-                disabled={!input.trim() || loading}
+                disabled={(!input.trim() && pendingFiles.length === 0) || loading}
                 className={`p-2 rounded-full transition-colors ${
-                  !input.trim() || loading 
+                  (!input.trim() && pendingFiles.length === 0) || loading 
                   ? "bg-gray-600/30 text-gray-500 cursor-not-allowed" 
                   : "bg-white text-black hover:bg-gray-200 cursor-pointer"
                 }`}

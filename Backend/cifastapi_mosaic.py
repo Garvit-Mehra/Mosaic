@@ -1,4 +1,8 @@
-from fastapi import FastAPI, HTTPException, Request, Depends
+import os
+import certifi
+os.environ['SSL_CERT_FILE'] = certifi.where()
+
+from fastapi import FastAPI, HTTPException, Request, Depends, UploadFile, File, Form
 from client import AgentRegistry, MosaicHandler, is_server_active
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -183,6 +187,7 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[int] = None
     transient: bool = False
     model: Optional[str] = None
+    temp_id: Optional[str] = None
 
 
 class ConversationCreateRequest(BaseModel):
@@ -436,6 +441,9 @@ async def chat_stream(request: Request, req: ChatRequest, user: TokenUser = Depe
         title = req.message[:50] + ("..." if len(req.message) > 50 else "")
         convo = conversation_db.create_conversation(title=title, user_id=user.username)
         conv_id = convo.id
+        # Migrate any documents uploaded to temp to this new conversation
+        from utils.ProcessPDF import migrate_documents
+        migrate_documents(req.temp_id or "temp", str(conv_id))
 
     logger.info(f"[stream] user={user.username} conv={conv_id} msg='{req.message[:60]}'")
 
@@ -646,6 +654,93 @@ async def pull_ollama_model(req: PullModelRequest):
     except Exception as e:
         logger.error(f"Failed to pull Ollama model {req.name}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# Document & RAG API
+# =============================================================================
+
+import tempfile
+import shutil
+from utils.ProcessPDF import process_file, add_document_to_store, get_document_summary, clear_documents, get_documents_list, remove_document, migrate_documents
+
+@app.post("/api/documents/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    conversation_id: Optional[str] = Form(None)
+):
+    """Upload a document for RAG processing"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+        
+    conv_id = conversation_id or "temp"
+        
+    try:
+        # Save to temp file
+        tmp_dir = os.path.join(os.path.dirname(__file__), "tmp")
+        os.makedirs(tmp_dir, exist_ok=True)
+        
+        # Preserve extension
+        ext = os.path.splitext(file.filename)[1]
+        fd, tmp_path = tempfile.mkstemp(dir=tmp_dir, suffix=ext)
+        os.close(fd)
+        
+        with open(tmp_path, "wb") as buffer:
+            data = await file.read()
+            buffer.write(data)
+            
+        # Process and add to vector store
+        content = process_file(tmp_path)
+        result = add_document_to_store(tmp_path, content, conv_id, original_filename=file.filename)
+        
+        # Cleanup temp file
+        os.remove(tmp_path)
+        
+        return {"status": "success", "message": result}
+    except Exception as e:
+        logger.error(f"Failed to process document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class MigrateRequest(BaseModel):
+    old_id: str
+    new_id: str
+
+@app.post("/api/documents/migrate")
+async def migrate_documents_endpoint(req: MigrateRequest):
+    """Migrate documents from one conversation to another (e.g. temp -> new)"""
+    try:
+        msg = migrate_documents(req.old_id, req.new_id)
+        return {"status": "success", "message": msg}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/documents/{conversation_id}")
+async def list_documents_endpoint(conversation_id: str):
+    """List all loaded documents in RAG for a conversation"""
+    try:
+        docs = get_documents_list(conversation_id)
+        return {"documents": docs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/documents/{conversation_id}/{filename}")
+async def delete_single_document_endpoint(conversation_id: str, filename: str):
+    """Delete a specific document from a conversation"""
+    try:
+        msg = remove_document(filename, conversation_id)
+        return {"status": "success", "message": msg}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/documents/clear/{conversation_id}")
+async def clear_documents_endpoint(conversation_id: str):
+    """Clear all documents from RAG memory for a conversation"""
+    try:
+        msg = clear_documents(conversation_id)
+        return {"status": "success", "message": msg}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 def validate_server_url(url: str):

@@ -8,6 +8,7 @@ venv/
 # IDE
 .vscode/
 .idea/
+.cursor/
 
 # Databases
 *.db
@@ -46,3 +47,4 @@ Frontend/playwright-report/
 Frontend/test-results/
 local_ci.sh
 TESTING.md
+Backend/chroma_db/
