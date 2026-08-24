@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Roboto } from "next/font/google";
+import { Inter } from "next/font/google";
 import { SessionProvider } from "next-auth/react";
 import SideBarWrapper from "./components/common/SideBarWrapper";
 import KeyboardShortcuts from "./components/common/KeyboardShortcuts";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { ThemeProvider } from "@/src/lib/theme";
 
-const roboto = Roboto({
-  weight: ["400", "500"],
+const inter = Inter({
   subsets: ["latin"],
 });
 
@@ -23,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={roboto.className} suppressHydrationWarning>
+    <html lang="en" className={inter.className} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{

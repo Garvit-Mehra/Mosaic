@@ -7,7 +7,16 @@ import { authFetch } from "@/src/lib/auth";
 import MessageBubble from "@/src/app/components/chat/MessageBubble";
 import ModelSelector from "../../components/common/ModelSelector";
 import FileUploadButton from "@/src/app/components/chat/FileUploadButton";
-import ActiveDocuments from "@/src/app/components/chat/ActiveDocuments";
+import ActiveDocuments from "../../components/chat/ActiveDocuments";
+import { motion, AnimatePresence } from "framer-motion";
+
+const butterySpring: any = {
+  type: "spring",
+  stiffness: 400,
+  damping: 30,
+  mass: 1,
+  restDelta: 0.001
+};
 
 interface Message {
   id: number;
@@ -307,8 +316,11 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
       {/* Input area */}
       <div className="border-t border-[var(--hover)] px-4 py-4">
-        <div className="max-w-3xl mx-auto w-full">
-          <div className="flex flex-col gap-2 bg-[#2f2f2f] rounded-3xl p-2 border border-transparent focus-within:border-gray-600 transition-colors shadow-sm">
+        <div className="max-w-3xl mx-auto w-full relative z-20">
+          <motion.div 
+            whileTap={{ scale: 0.99 }}
+            className="flex flex-col gap-2 mosaic-panel rounded-3xl mosaic-input-focus p-2 transition-all shadow-xl"
+          >
             {/* Pending Files Tray */}
             {pendingFiles.length > 0 && (
               <div className="flex flex-wrap gap-2 px-3 pt-2">
@@ -319,11 +331,11 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                     ) : (
                       <FileIcon className="w-4 h-4 text-[var(--color1)] shrink-0" />
                     )}
-                    <span className="truncate text-gray-200">{file.name}</span>
+                    <span className="truncate text-[var(--color1)]">{file.name}</span>
                     {!uploadingFiles && (
                       <button
                         onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== idx))}
-                        className="p-0.5 hover:bg-[#505050] rounded-full text-gray-400 hover:text-white shrink-0"
+                        className="p-0.5 hover:bg-[rgba(255,255,255,0.2)] rounded-full text-[var(--color1)] opacity-70 hover:opacity-100 shrink-0 transition-colors"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -333,10 +345,10 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
               </div>
             )}
 
-            <textarea
+              <textarea
               ref={textareaRef}
               rows={1}
-              className="flex-1 w-full resize-none bg-transparent text-gray-200 placeholder-gray-400 focus:outline-none text-base px-4 py-3 min-h-[52px]"
+              className="flex-1 w-full resize-none bg-transparent text-[var(--color1)] placeholder-[var(--color1)] placeholder-opacity-50 focus:outline-none text-base px-4 py-3 min-h-[52px]"
               placeholder="Send a message"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -348,19 +360,21 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
               
               <ModelSelector />
               
-              <button
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.9 }}
                 onClick={() => sendMessage()}
                 disabled={(!input.trim() && pendingFiles.length === 0) || loading}
-                className={`p-2 rounded-full transition-colors ${
+                className={`p-2 rounded-full transition-colors flex items-center justify-center ${
                   (!input.trim() && pendingFiles.length === 0) || loading 
-                  ? "bg-gray-600/30 text-gray-500 cursor-not-allowed" 
-                  : "bg-white text-black hover:bg-gray-200 cursor-pointer"
+                  ? "bg-[rgba(255,255,255,0.1)] text-[var(--color1)] opacity-50 cursor-not-allowed" 
+                  : "bg-[var(--color1)] text-[var(--background)] cursor-pointer shadow-md"
                 }`}
               >
                 <ArrowUp className="w-4 h-4" />
-              </button>
+              </motion.button>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { FileText, X, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface Document {
   filename: string;
@@ -68,30 +69,46 @@ export default function ActiveDocuments({ conversationId }: { conversationId: st
 
   return (
     <div className="absolute top-4 right-4 z-10 flex flex-col items-end">
-      <button
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-[#2f2f2f] border border-[#404040] px-3 py-1.5 rounded-lg text-sm text-[var(--color3)] hover:text-white transition-colors shadow-lg"
+        className="flex items-center gap-2 mosaic-glass-button px-4 py-2 rounded-full text-sm font-medium text-[var(--color1)] transition-colors shadow-lg"
       >
         <FileText className="w-4 h-4 text-emerald-400" />
         <span>{documents.length} file{documents.length !== 1 ? 's' : ''}</span>
-        {isOpen ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
-      </button>
+        {isOpen ? <ChevronUp className="w-4 h-4 ml-1 opacity-70" /> : <ChevronDown className="w-4 h-4 ml-1 opacity-70" />}
+      </motion.button>
 
+      <AnimatePresence>
       {isOpen && (
-        <div className="mt-2 w-64 bg-[#2f2f2f] border border-[#404040] rounded-xl shadow-2xl p-2 flex flex-col gap-1 max-h-64 overflow-y-auto">
+        <motion.div 
+          initial={{ opacity: 0, y: -10, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+          className="mt-3 w-64 mosaic-panel rounded-2xl p-2 flex flex-col gap-1 max-h-64 overflow-y-auto origin-top-right"
+        >
           {loading ? (
-            <div className="flex justify-center p-2"><Loader2 className="w-4 h-4 animate-spin text-gray-400" /></div>
+            <div className="flex justify-center p-2"><Loader2 className="w-4 h-4 animate-spin text-[var(--color1)] opacity-70" /></div>
           ) : (
             documents.map((doc) => (
-              <div key={doc.filename} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[#202020] border border-[#303030]">
+              <motion.div 
+                key={doc.filename}
+                layout
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="flex items-center justify-between gap-2 p-3 rounded-2xl bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,255,255,0.1)] transition-colors"
+              >
                 <div className="flex flex-col overflow-hidden">
-                  <span className="text-xs text-gray-200 truncate" title={doc.filename}>{doc.filename}</span>
-                  <span className="text-[10px] text-gray-500">{Math.round(doc.size_chars / 1000)}k chars</span>
+                  <span className="text-[13px] text-[var(--color1)] font-medium truncate" title={doc.filename}>{doc.filename}</span>
+                  <span className="text-[11px] text-[var(--color1)] opacity-60">{Math.round(doc.size_chars / 1000)}k chars</span>
                 </div>
                 <button
                   onClick={() => removeDocument(doc.filename)}
                   disabled={deletingFile === doc.filename}
-                  className="p-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/30 transition-colors"
+                  className="p-1.5 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors"
                 >
                   {deletingFile === doc.filename ? (
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -99,11 +116,12 @@ export default function ActiveDocuments({ conversationId }: { conversationId: st
                     <X className="w-3 h-3" />
                   )}
                 </button>
-              </div>
+              </motion.div>
             ))
           )}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }

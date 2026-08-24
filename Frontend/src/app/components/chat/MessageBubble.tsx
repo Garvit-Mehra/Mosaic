@@ -55,6 +55,8 @@ function CodeBlockWrapper({ language, rawCode, children }: any) {
   );
 }
 
+import { motion } from "framer-motion";
+
 export default function MessageBubble({
   role,
   content,
@@ -72,12 +74,18 @@ export default function MessageBubble({
   };
 
   return (
-    <div className={`flex ${role === "user" ? "justify-end" : "justify-start"} group`}>
-      <div
-        className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed relative ${
+    <motion.div 
+      initial={{ opacity: 0, y: 15, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+      className={`flex w-full ${role === "user" ? "justify-end" : "justify-start"} group mb-4`}
+    >
+      <div className={`flex flex-col ${role === "user" ? "items-end" : "items-start"} max-w-[85%]`}>
+        <div
+          className={`rounded-[32px] px-5 py-4 text-[15px] leading-relaxed relative shadow-lg transform-gpu ${
           role === "user"
-            ? "bg-[var(--user-bubble)] text-[var(--color1)]"
-            : "text-[var(--color1)]"
+            ? "bg-[var(--glass-bg)] backdrop-blur-xl border border-[var(--glass-border)] text-[var(--color1)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]"
+            : "bg-[rgba(255,255,255,0.03)] backdrop-blur-md border border-[var(--glass-border)] text-[var(--color1)]"
         }`}
       >
         {/* Content */}
@@ -139,9 +147,11 @@ export default function MessageBubble({
           </span>
         )}
 
+        </div>
+
         {/* Action buttons (assistant only, not while streaming) */}
         {role === "assistant" && content && !isStreaming && (
-          <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 mt-1.5 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               onClick={handleCopy}
               className="p-1 rounded hover:bg-[var(--hover)] text-[var(--color3)] hover:text-[var(--color1)] transition-colors"
@@ -161,6 +171,6 @@ export default function MessageBubble({
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

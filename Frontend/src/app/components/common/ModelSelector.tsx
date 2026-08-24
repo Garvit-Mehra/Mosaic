@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function ModelSelector() {
   const [models, setModels] = useState<string[]>([]);
@@ -49,45 +50,57 @@ export default function ModelSelector() {
 
   return (
     <div className="relative">
-      <button
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-600/20 hover:bg-gray-600/40 text-sm font-medium text-gray-300 transition-colors"
+        className="flex items-center gap-2 px-4 py-2 rounded-full mosaic-glass-button text-sm font-medium text-[var(--color1)] transition-colors"
       >
         <div className="flex items-center gap-1.5">
           {loading ? (
-            <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
+            <Loader2 className="w-4 h-4 animate-spin opacity-70" />
           ) : (
             selectedModel
           )}
         </div>
-        <ChevronDown className="w-4 h-4 text-gray-400" />
-      </button>
+        <ChevronDown className="w-4 h-4 opacity-70" />
+      </motion.button>
 
+      <AnimatePresence>
       {isOpen && (
-        <div className="absolute right-0 bottom-full mb-2 w-48 rounded-xl bg-[#2a2a2a] border border-gray-700 shadow-xl overflow-hidden z-50">
-          <div className="p-1.5">
-            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+        <motion.div 
+          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 10, scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
+          className="absolute right-0 bottom-full mb-3 w-56 mosaic-panel rounded-2xl p-2 z-50 origin-bottom-right"
+        >
+          <div className="p-1">
+            <div className="px-3 py-2 text-[10px] font-bold text-[var(--color3)] uppercase tracking-wider mb-1">
               Local Ollama Models
             </div>
             {models.length === 0 && !loading && (
-              <div className="px-2 py-2 text-sm text-gray-500">No models found</div>
+              <div className="px-3 py-2 text-sm text-[var(--color3)]">No models found</div>
             )}
-            {models.map((m) => (
-              <button
-                key={m}
-                onClick={() => handleSelect(m)}
-                className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors ${
-                  selectedModel === m
-                    ? "bg-blue-500/10 text-blue-400 font-medium"
-                    : "text-gray-300 hover:bg-gray-800"
-                }`}
-              >
-                {m}
-              </button>
-            ))}
+            <div className="space-y-1">
+              {models.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => handleSelect(m)}
+                  className={`w-full text-left px-3 py-2.5 text-sm rounded-xl transition-all ${
+                    selectedModel === m
+                      ? "bg-[rgba(255,255,255,0.2)] text-[var(--color1)] font-semibold shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]"
+                      : "text-[var(--color1)] opacity-80 hover:opacity-100 hover:bg-[rgba(255,255,255,0.1)]"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }

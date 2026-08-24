@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { authFetch } from "@/src/lib/auth";
 import { useTheme } from "@/src/lib/theme";
+import { motion, AnimatePresence } from "framer-motion";
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -15,6 +16,14 @@ interface Conversation {
   title: string;
   updated_at: string;
 }
+
+const butterySpring: any = {
+  type: "spring",
+  stiffness: 400,
+  damping: 30,
+  mass: 1,
+  restDelta: 0.001
+};
 
 export default function SideBar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -29,7 +38,6 @@ export default function SideBar() {
   const userIsAdmin = (session as any)?.role === "admin" || (session?.user as any)?.role === "admin";
   const backendToken = (session as any)?.backendToken;
 
-  // Filter conversations by search
   const filteredConversations = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
     const q = searchQuery.toLowerCase();
@@ -44,25 +52,20 @@ export default function SideBar() {
         const data = await res.json();
         setConversations(data);
       }
-    } catch {
-      // silent
-    }
+    } catch {}
   };
 
   useEffect(() => {
     if (backendToken) {
       fetchConversations();
       const interval = setInterval(fetchConversations, 10000);
-      
       const handleRefresh = () => fetchConversations();
       window.addEventListener("mosaic-sidebar-refresh", handleRefresh);
-
       return () => {
         clearInterval(interval);
         window.removeEventListener("mosaic-sidebar-refresh", handleRefresh);
       };
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendToken]);
 
   const deleteConversation = async (id: number, e: React.MouseEvent) => {
@@ -71,179 +74,165 @@ export default function SideBar() {
     try {
       await authFetch(`${BACKEND}/conversations/${id}`, { method: "DELETE" }, backendToken);
       setConversations((prev) => prev.filter((c) => c.id !== id));
-      // If we just deleted the conversation we're viewing, go home
       if (pathname === `/chat/${id}`) {
         router.push("/");
       }
-    } catch {
-      // silent
-    }
+    } catch {}
+  };
+
+  const itemVariants = {
+    rest: { scale: 1 },
+    hover: { scale: 1.03, backgroundColor: "rgba(255, 255, 255, 0.1)" },
+    tap: { scale: 0.95 }
   };
 
   return (
     <aside
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="relative h-screen flex-shrink-0"
+      className="relative h-screen flex-shrink-0 py-[6px] pl-[6px] pr-0"
     >
-      {/* Collapse toggle */}
-      <button
-        className={`flex justify-center items-center bg-[var(--color2)] text-[var(--color4)] cursor-pointer
-          w-[22px] h-[36px] absolute top-7 right-[-22px] rounded-r-lg z-10
-          transition-opacity duration-300 ease-in-out
+      <motion.button
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        className={`absolute top-10 right-[-10px] z-20 w-8 h-8 rounded-full flex items-center justify-center mosaic-panel text-[var(--color1)]
+          transition-opacity duration-300 ease-in-out shadow-lg
           ${hovered ? "opacity-100" : "opacity-0 pointer-events-none"}`}
         onClick={() => setCollapsed(!collapsed)}
-        onMouseEnter={() => setHovered(true)}
       >
         {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-      </button>
+      </motion.button>
 
-      <div
-        className={`flex flex-col h-full transition-all duration-300 ease-in-out bg-[var(--color4)] border-r border-[var(--hover)] ${
-          collapsed ? "w-14" : "w-64"
-        }`}
+      <motion.div
+        animate={{ width: collapsed ? 80 : 280 }}
+        transition={butterySpring}
+        className="mosaic-panel h-full rounded-xl flex flex-col overflow-hidden"
       >
         {/* Header */}
-        <div className="flex items-center px-3 py-4">
-          <Link href="/" className="flex items-center gap-2">
-            <span
-              className={`font-bold text-[var(--color2)] transition-all duration-300 ${
-                collapsed ? "text-lg" : "text-xl"
-              }`}
-            >
+        <div className="flex items-center px-5 py-6">
+          <Link href="/" className="flex items-center gap-3">
+            <motion.span layout transition={butterySpring} className="font-bold text-2xl text-[var(--color1)] tracking-tight">
               {collapsed ? "M" : "Mosaic"}
-            </span>
+            </motion.span>
           </Link>
         </div>
 
-        {/* New Chat button */}
-        <div className="px-2 mb-2">
-          <Link
-            href="/"
-            onClick={(e) => {
-              if (pathname === "/") {
-                e.preventDefault();
-                window.dispatchEvent(new Event("mosaic-new-chat"));
-              }
-            }}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors ${
-              collapsed ? "justify-center" : ""
-            }`}
-          >
-            <SquarePen size={16} className="text-[var(--color3)] flex-shrink-0" />
-            {!collapsed && <span className="text-[var(--color3)]">New Chat</span>}
-          </Link>
+        {/* New Chat */}
+        <div className="px-3 mb-4">
+          <motion.div variants={itemVariants} initial="rest" whileHover="hover" whileTap="tap" className="rounded-2xl">
+            <Link
+              href="/"
+              onClick={(e) => {
+                if (pathname === "/") {
+                  e.preventDefault();
+                  window.dispatchEvent(new Event("mosaic-new-chat"));
+                }
+              }}
+              className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-colors ${collapsed ? "justify-center" : ""}`}
+            >
+              <SquarePen size={18} className="text-[var(--color1)] flex-shrink-0" />
+              <AnimatePresence>
+                {!collapsed && (
+                  <motion.span initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} className="text-[var(--color1)]">
+                    New Chat
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </Link>
+          </motion.div>
         </div>
 
-        {/* Search + Conversations list */}
-        <div className="flex-1 overflow-y-auto px-2">
-          {!collapsed && (
-            <>
-              {/* Search input */}
-              <div className="px-1 py-2">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[var(--input-bg)] border border-[var(--hover)]">
-                  <Search size={12} className="text-[var(--color3)] flex-shrink-0" />
-                  <input
-                    type="text"
-                    placeholder="Search chats..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-transparent text-xs text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none w-full"
-                  />
+        {/* Search + Chats */}
+        <div className="flex-1 overflow-y-auto px-3">
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+                <div className="px-1 py-2 mb-2">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[var(--input-bg)] mosaic-input-focus border border-transparent transition-all">
+                    <Search size={14} className="text-[var(--color3)] flex-shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Search chats..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="bg-transparent text-sm text-[var(--color1)] placeholder-[var(--color3)] focus:outline-none w-full"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="px-3 py-1 text-xs text-[var(--color3)] uppercase tracking-wider">
-                Chats
-              </div>
-            </>
-          )}
-          <ul className="space-y-0.5">
+                <div className="px-3 py-2 text-xs font-semibold text-[var(--color3)] uppercase tracking-wider">
+                  Chats
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          
+          <ul className="space-y-1">
             {filteredConversations.map((convo) => (
               <li key={convo.id} className="group">
-                <Link
-                  href={`/chat/${convo.id}`}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-colors hover:bg-[var(--hover)] ${
-                    pathname === `/chat/${convo.id}` ? "bg-[var(--hover)]" : ""
-                  } ${collapsed ? "justify-center" : ""}`}
-                >
-                  <MessageCircle size={14} className="text-[var(--color3)] flex-shrink-0" />
-                  {!collapsed && (
-                    <>
-                      <span className="flex-1 truncate text-[var(--color1)]">
-                        {convo.title}
-                      </span>
-                      <button
-                        onClick={(e) => deleteConversation(convo.id, e)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-red-400"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </>
-                  )}
-                </Link>
+                <motion.div variants={itemVariants} initial="rest" whileHover="hover" whileTap="tap" className="rounded-2xl">
+                  <Link
+                    href={`/chat/${convo.id}`}
+                    className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl text-sm font-medium transition-colors ${
+                      pathname === `/chat/${convo.id}` ? "bg-[var(--hover)]" : ""
+                    } ${collapsed ? "justify-center" : ""}`}
+                  >
+                    <MessageCircle size={16} className="text-[var(--color3)] flex-shrink-0" />
+                    {!collapsed && (
+                      <>
+                        <span className="flex-1 truncate text-[var(--color1)]">{convo.title}</span>
+                        <button
+                          onClick={(e) => deleteConversation(convo.id, e)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:text-red-400"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
+                  </Link>
+                </motion.div>
               </li>
             ))}
-            {!collapsed && searchQuery && filteredConversations.length === 0 && (
-              <li className="px-3 py-2 text-xs text-[var(--color3)]">No matches</li>
-            )}
           </ul>
         </div>
 
-        {/* Bottom — Theme, Servers, Admin, Logout */}
-        <div className="px-2 py-3 border-t border-[var(--hover)] space-y-1">
-          <button
-            onClick={toggleTheme}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors w-full ${
-              collapsed ? "justify-center" : ""
-            }`}
-          >
-            {theme === "dark" ? (
-              <Sun size={16} className="text-[var(--color3)] flex-shrink-0" />
-            ) : (
-              <Moon size={16} className="text-[var(--color3)] flex-shrink-0" />
-            )}
-            {!collapsed && <span className="text-[var(--color3)]">{theme === "dark" ? "Light mode" : "Dark mode"}</span>}
-          </button>
-          <Link
-            href="/models"
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors ${
-              pathname === "/models" ? "bg-[var(--hover)]" : ""
-            } ${collapsed ? "justify-center" : ""}`}
-          >
-            <Database size={16} className="text-[var(--color3)] flex-shrink-0" />
-            {!collapsed && <span className="text-[var(--color3)]">Models</span>}
-          </Link>
-          <Link
-            href="/settings"
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors ${
-              pathname === "/settings" ? "bg-[var(--hover)]" : ""
-            } ${collapsed ? "justify-center" : ""}`}
-          >
-            <Settings size={16} className="text-[var(--color3)] flex-shrink-0" />
-            {!collapsed && <span className="text-[var(--color3)]">Servers</span>}
-          </Link>
-          {userIsAdmin && (
-            <Link
-              href="/admin"
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors ${
-                pathname === "/admin" ? "bg-[var(--hover)]" : ""
-              } ${collapsed ? "justify-center" : ""}`}
-            >
-              <Shield size={16} className="text-[var(--color3)] flex-shrink-0" />
-              {!collapsed && <span className="text-[var(--color3)]">Admin</span>}
+        {/* Bottom Options */}
+        <div className="px-3 py-4 mt-auto border-t border-[var(--glass-border)] space-y-1">
+          <motion.button variants={itemVariants} initial="rest" whileHover="hover" whileTap="tap"
+            onClick={toggleTheme} className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium w-full ${collapsed ? "justify-center" : ""}`}>
+            {theme === "dark" ? <Sun size={18} className="text-[var(--color3)] flex-shrink-0" /> : <Moon size={18} className="text-[var(--color3)] flex-shrink-0" />}
+            {!collapsed && <span className="text-[var(--color1)]">{theme === "dark" ? "Light mode" : "Dark mode"}</span>}
+          </motion.button>
+          
+          <motion.div variants={itemVariants} initial="rest" whileHover="hover" whileTap="tap" className="rounded-2xl">
+            <Link href="/models" className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium ${pathname === "/models" ? "bg-[var(--hover)]" : ""} ${collapsed ? "justify-center" : ""}`}>
+              <Database size={18} className="text-[var(--color3)] flex-shrink-0" />
+              {!collapsed && <span className="text-[var(--color1)]">Models</span>}
             </Link>
+          </motion.div>
+
+          <motion.div variants={itemVariants} initial="rest" whileHover="hover" whileTap="tap" className="rounded-2xl">
+            <Link href="/settings" className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium ${pathname === "/settings" ? "bg-[var(--hover)]" : ""} ${collapsed ? "justify-center" : ""}`}>
+              <Settings size={18} className="text-[var(--color3)] flex-shrink-0" />
+              {!collapsed && <span className="text-[var(--color1)]">Servers</span>}
+            </Link>
+          </motion.div>
+
+          {userIsAdmin && (
+            <motion.div variants={itemVariants} initial="rest" whileHover="hover" whileTap="tap" className="rounded-2xl">
+              <Link href="/admin" className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium ${pathname === "/admin" ? "bg-[var(--hover)]" : ""} ${collapsed ? "justify-center" : ""}`}>
+                <Shield size={18} className="text-[var(--color3)] flex-shrink-0" />
+                {!collapsed && <span className="text-[var(--color1)]">Admin</span>}
+              </Link>
+            </motion.div>
           )}
-          <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--hover)] transition-colors w-full ${
-              collapsed ? "justify-center" : ""
-            }`}
-          >
-            <LogOut size={16} className="text-[var(--color3)] flex-shrink-0" />
-            {!collapsed && <span className="text-[var(--color3)]">Logout</span>}
-          </button>
+
+          <motion.button variants={itemVariants} initial="rest" whileHover="hover" whileTap="tap"
+            onClick={() => signOut({ callbackUrl: "/login" })} className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium w-full ${collapsed ? "justify-center" : ""}`}>
+            <LogOut size={18} className="text-[var(--color3)] flex-shrink-0" />
+            {!collapsed && <span className="text-[var(--color1)]">Logout</span>}
+          </motion.button>
         </div>
-      </div>
+      </motion.div>
     </aside>
   );
 }
